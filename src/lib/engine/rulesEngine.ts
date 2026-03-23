@@ -1,5 +1,7 @@
 import { Lead, supabase } from '../supabase';
 import { isWithin24HourSession, isWithinSendWindow } from './sessionWindow';
+import { evaluateWorkflowGraph } from './logicEvaluator';
+import { enqueueOutboundMessage } from '../queue/client';
 
 export async function handleOptOut(leadId: string, phoneNormalised: string) {
   console.log(`[Rules Engine] Processing STOP/Opt-Out for lead ${leadId}`);
@@ -38,28 +40,37 @@ export async function evaluateLeadAction(lead: Lead) {
 
   const hasSession = isWithin24HourSession(lead.wa_last_inbound_at);
 
-  // FSM Logic Placeholder (This will eventually load from `workflow_rules`)
-  switch (lead.wa_state) {
-    case 'wa_pending':
-      console.log(`[Rules Engine] State: pending -> wa_sent. Triggering welcome template for ${lead.id}`);
-      // Select template based on source
-      const templateToUse = lead.lead_source?.toLowerCase().includes('meta') 
-        ? 'wa_welcome_meta' 
-        : 'wa_welcome_organic';
-      
-      // TODO: enqueue Dispatch job (to prevent blocking API response here)
-      break;
-      
-    case 'wa_followup':
-      // They are queued for a followup
-      console.log(`[Rules Engine] State: followup. Checking timeline.`);
-      break;
+  // Fetch the latest published workflow rules
+  const { data: workflow, error } = await supabase
+    .from('workflow_rules')
+    .select('*')
+    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .single();
 
-    case 'wa_hot':
-      // Hot logic
-      break;
+  if (error || !workflow) {
+    console.error(`[Rules Engine] No active workflow rules found to process lead ${lead.id}`);
+    return;
+  }
 
-    default:
-      console.log(`[Rules Engine] No action defined for state ${lead.wa_state}`);
+  // Evaluate the lead against the Logic Builder graph
+  const action = evaluateWorkflowGraph(
+    lead.wa_state, 
+    lead, 
+    workflow.conditions_json as any, 
+    workflow.actions_json as any
+  );
+
+  console.log(`[Rules Engine] Logic Evaluator returned action: ${action.type} for state ${lead.wa_state}`);
+
+  if (action.type === 'send_template' && action.templateName) {
+    console.log(`[Rules Engine] Triggering template ${action.templateName} to ${lead.phone_normalised}`);
+    // Queue the dispatch
+    await enqueueOutboundMessage({
+      to: lead.phone_normalised,
+      from: '91xxxxxxxxxx', // TBD from sender profiles
+      contentSid: `HX_${action.templateName}_placeholder`, 
+    });
+  } else if (action.type === 'no_match') {
+    console.log(`[Rules Engine] No workflow path found for lead ${lead.id} in state ${lead.wa_state}`);
   }
 }
