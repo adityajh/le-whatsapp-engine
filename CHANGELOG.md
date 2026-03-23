@@ -3,6 +3,12 @@
 All notable changes to the Let's Enterprise WhatsApp Engine project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+### Added (Week 2 Fast-Track)
+- **Visual Logic Builder UI**: Implemented interactive React Flow canvas (`Builder.tsx`) with custom trigger, condition, and action nodes to let non-technical operators structure the WhatsApp engine state machine routing.
+- **Workflow State Persistance**: Built `/api/admin/workflow` endpoint to persist the visual logic schema into the Live Supabase `workflow_rules` database table.
+- **Dynamic Runtime Evaluator**: Built `logicEvaluator.ts` to replace hardcoded switches. When webhook hits, it dynamically grabs the `conditions_json` from the Live Database, climbs down the React Flow Node chart against live lead attributes, and seamlessly executes the Terminal Action Node!
+
 ## [1.0.0] - 2026-03-23
 ### Added
 - **Infrastructure Architecture**: Completed end-to-end plan for Vercel + Next.js + Supabase Postgres + Upstash Redis integration.
