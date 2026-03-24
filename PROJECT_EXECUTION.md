@@ -164,6 +164,7 @@
 - [ ] Document first A/B test results
 
 ### Reliability Enhancements
+- [ ] Set up [cron-job.org](https://cron-job.org) (free) to call `/api/cron/process-queue` every minute — required since Vercel Hobby plan limits crons to once daily
 - [ ] Add national holiday / suppression calendar (Indian public holidays)
 - [ ] Implement Zoho Bulk Write API for high-volume writeback batching (>500 leads/day headroom)
 - [ ] Build retry with exponential backoff across all outbound calls

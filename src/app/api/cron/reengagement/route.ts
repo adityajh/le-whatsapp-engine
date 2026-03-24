@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       // In a real scenario, this SID comes from DB mapping. Using placeholder per Architecture.
       await enqueueOutboundMessage({
         to: lead.phone_normalised,
-        contentSid: 'HX_wa_reengagement_placeholder',
+        contentSid: 'HXb0be78e0070d3153d3c1d5d62410b74a', // wa_reengagement (approved)
       });
 
       // 2. Update their state to 'wa_reengaged' so we don't spam them again
