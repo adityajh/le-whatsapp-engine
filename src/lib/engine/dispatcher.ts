@@ -13,12 +13,36 @@ export interface DispatchOptions {
   mediaUrl?: string[];
 }
 
+import { supabase } from '../supabase';
+
 /**
  * Dispatches a WhatsApp message via Twilio API
+ * Enforces a 2-message outbound cooldown limit relative to last inbound.
  * Returns the MessageInstance on success.
  */
 export async function dispatchMessage(opts: DispatchOptions) {
   try {
+    // Cooldown Enforcement Check
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('wa_last_inbound_at')
+      .eq('phone_normalised', opts.to)
+      .single();
+
+    // Count outbound messages since last inbound (or since epoch if null)
+    const inDate = lead?.wa_last_inbound_at || new Date(0).toISOString();
+    
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('phone_normalised', opts.to)
+      .eq('direction', 'outbound')
+      .gt('created_at', inDate);
+
+    if (count && count >= 2) {
+      console.warn(`[Cooldown Enforcement] Dropping message to ${opts.to}. Exceeded 2 outbound messages without a reply.`);
+      return null;
+    }
     const messageParams: any = {
       from: `whatsapp:${opts.from}`,
       to: `whatsapp:${opts.to}`,

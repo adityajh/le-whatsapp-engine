@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import twilio from 'twilio';
 import { config } from '@/lib/config';
+import { enqueueStatusUpdate } from '@/lib/queue/client';
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +31,9 @@ export async function POST(req: NextRequest) {
     // 2. Extract Message Status
     const messageSid = bodyArgs['MessageSid'];
     const messageStatus = bodyArgs['MessageStatus']; // sent, delivered, read, failed, undelivered
-    const errorCode = bodyArgs['ErrorCode'];
 
     // 3. Send to Processing Queue (to update DB and Zoho)
-    // TODO: enqueue status update
+    await enqueueStatusUpdate(bodyArgs);
     
     console.log(`[Webhook] Message ${messageSid} status updated to ${messageStatus}`);
 

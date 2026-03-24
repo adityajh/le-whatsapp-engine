@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import twilio from 'twilio';
 import { config } from '@/lib/config';
+import { enqueueInboundMessage } from '@/lib/queue/client';
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,11 +35,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Extract key fields
     const fromNumber = bodyArgs['From']; // e.g. "whatsapp:+919876543210"
-    const body = bodyArgs['Body'];
-    const messageSid = bodyArgs['MessageSid'];
 
     // 3. Send to Processing Queue
-    // TODO: enqueue inbound message processor
+    await enqueueInboundMessage(bodyArgs);
     
     console.log(`[Webhook] Received Inbound Twilio Msg from ${fromNumber}`);
 
