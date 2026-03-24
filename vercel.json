@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-queue",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/sla-monitor",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/zoho-reconcile",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
