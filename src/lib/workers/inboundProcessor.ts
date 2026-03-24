@@ -34,6 +34,16 @@ export async function processInboundMessage(job: Job) {
 
   const now = new Date().toISOString();
 
+  // Owner Assignment Logic
+  let assignedOwner = null;
+  const { data: currentLead } = await supabase.from('leads').select('owner_email').eq('phone_normalised', cleanPhone).single();
+  
+  if (currentLead && !currentLead.owner_email && (replyClass === 'interested' || replyClass === 'fee_question')) {
+    // Basic assignment logic - placeholder for round-robin
+    assignedOwner = 'team@letsenterprise.in';
+    console.log(`[Owner Assignment] Lead ${cleanPhone} responded favorably. Automatically assigning to ${assignedOwner}`);
+  }
+
   // Update Supabase leads
   const { data: lead, error: leadError } = await supabase
     .from('leads')
@@ -41,10 +51,11 @@ export async function processInboundMessage(job: Job) {
       wa_reply_class: replyClass,
       wa_hotness: waHotness,
       wa_last_inbound_at: now,
-      wa_opt_in: waOptIn
+      wa_opt_in: waOptIn,
+      ...(assignedOwner ? { owner_email: assignedOwner } : {})
     })
     .eq('phone_normalised', cleanPhone)
-    .select('zoho_lead_id')
+    .select('zoho_lead_id, owner_email')
     .single();
 
   if (leadError && leadError.code !== 'PGRST116') {

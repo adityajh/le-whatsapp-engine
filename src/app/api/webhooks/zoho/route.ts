@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { config } from '@/lib/config';
+import { supabase } from '@/lib/supabase';
+import { evaluateLeadAction } from '@/lib/engine/rulesEngine';
 
 // Define expected Zoho payload schema loosely for now
 const zohoPayloadSchema = z.object({
@@ -51,12 +53,37 @@ export async function POST(req: NextRequest) {
 
     const data = validation.data;
 
-    // 4. Send to Queue (BullMQ) or immediate processing
-    // TODO: enqueue(data)
-    
-    console.log(`[Webhook] Received Zoho Lead: ${data.zoho_lead_id}`);
+    // Normalise Phone
+    const phone = data.phone.replace(/\D/g, '');
+    const cleanPhone = phone.startsWith('91') ? `+${phone}` : (phone.length === 10 ? `+91${phone}` : `+${phone}`);
 
-    return NextResponse.json({ success: true, received: true }, { status: 200 });
+    // Upsert Lead into Supabase Mirror
+    const { data: lead, error: dbError } = await supabase
+      .from('leads')
+      .upsert({
+        zoho_lead_id: data.zoho_lead_id,
+        phone_normalised: cleanPhone,
+        name: data.name,
+        email: data.email,
+        lead_source: data.lead_source,
+        campaign_name: data.campaign_name,
+        owner_email: data.owner_email,
+        wa_state: 'wa_pending',
+        wa_opt_in: true, // Assuming creation inherently opts them in initially
+      }, { onConflict: 'phone_normalised' })
+      .select()
+      .single();
+
+    if (dbError || !lead) {
+      console.error(`[Webhook] DB Error upserting lead ${data.zoho_lead_id}:`, dbError);
+      return NextResponse.json({ error: 'DB Error' }, { status: 500 });
+    }
+
+    // Evaluate dynamic source-based routing natively through the React Flow rules engine
+    console.log(`[Webhook] Evaluating lead ${lead.zoho_lead_id} via Logic Builder...`);
+    await evaluateLeadAction(lead);
+    
+    return NextResponse.json({ success: true, received: true, evaluated: true }, { status: 200 });
 
   } catch (error: any) {
     console.error(`[Webhook error] Zoho:`, error);
