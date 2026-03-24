@@ -10,11 +10,11 @@ const zohoPayloadSchema = z.object({
   id: z.string().optional(),
   zoho_lead_id: z.string(),
   phone: z.string(),
-  name: z.string().optional(),
-  email: z.string().email().optional(),
-  lead_source: z.string().optional(),
-  campaign_name: z.string().optional(),
-  owner_email: z.string().email().optional(),
+  name: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  lead_source: z.string().optional().nullable(),
+  campaign_name: z.string().optional().nullable(),
+  owner_email: z.string().email().optional().nullable(),
   event_type: z.string().optional(), // 'created', 'updated', 'no_activity'
 });
 
