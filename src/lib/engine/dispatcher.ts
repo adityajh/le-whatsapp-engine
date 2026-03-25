@@ -53,11 +53,12 @@ export async function dispatchMessage(opts: DispatchOptions) {
     }
 
     if (opts.contentSid) {
-      // Using Twilio Content API (modern approach for templated messages)
       messageParams.contentSid = opts.contentSid;
-      // Note: The Twilio Node SDK expects an OBJECT for contentVariables, 
-      // not a JSON string. stringifying it can cause 63027 errors.
-      messageParams.contentVariables = opts.contentVariables || {};
+      // CRITICAL: Do NOT pass contentVariables at all for templates
+      // without variables. Passing even {} causes Twilio error 63027.
+      if (opts.contentVariables && Object.keys(opts.contentVariables).length > 0) {
+        messageParams.contentVariables = JSON.stringify(opts.contentVariables);
+      }
     }
 
     console.log(`[Dispatcher] Sending to ${opts.to} with SID: ${opts.contentSid || 'none'}`);
