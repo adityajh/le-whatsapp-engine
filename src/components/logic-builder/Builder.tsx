@@ -18,6 +18,7 @@ import 'reactflow/dist/style.css';
 import { X, Save, Plus } from 'lucide-react';
 
 import { TriggerNode, ConditionNode, ActionNode, EndNode } from './Nodes';
+import { TEMPLATE_SIDS, WORKFLOW_STATES, LEAD_FIELDS, SOURCE_VALUES } from '@/lib/constants';
 
 const nodeTypes = {
   triggerNode: TriggerNode,
@@ -37,7 +38,7 @@ const initialNodes: Node[] = [
     id: '2',
     type: 'conditionNode',
     position: { x: 250, y: 200 },
-    data: { label: 'Source == Meta Ads', field: 'lead_source', value: 'Meta Ads' },
+    data: { label: 'lead_source == Meta Ads', field: 'lead_source', value: 'Meta Ads' },
   },
   {
     id: '3',
@@ -97,19 +98,20 @@ export default function LogicBuilderCanvas() {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === id) {
+          const combinedData = { ...node.data, ...newData };
           // Compute new label based on type
           let label = node.data.label;
           if (node.type === 'triggerNode') {
-            label = `State: ${newData.state || ''}`;
+            label = `State: ${combinedData.state || ''}`;
           } else if (node.type === 'conditionNode') {
-            label = `${newData.field || ''} == ${newData.value || ''}`;
+            label = `${combinedData.field || ''} == ${combinedData.value || ''}`;
           } else if (node.type === 'actionNode') {
-            label = `Send Template: ${newData.templateName || ''}`;
+            label = `Send Template: ${combinedData.templateName || ''}`;
           }
 
           return {
             ...node,
-            data: { ...node.data, ...newData, label },
+            data: { ...combinedData, label },
           };
         }
         return node;
@@ -118,19 +120,19 @@ export default function LogicBuilderCanvas() {
   };
 
   const addNode = (type: string) => {
-    const id = `${nodes.length + 1}`;
+    const id = `${Date.now()}`;
     const newNode: Node = {
       id,
       type,
       position: { x: 100, y: 100 },
       data: { label: `New ${type}` },
     };
-    if (type === 'triggerNode') newNode.data.state = 'wa_pending';
+    if (type === 'triggerNode') newNode.data.state = WORKFLOW_STATES[0];
     if (type === 'conditionNode') {
-      newNode.data.field = 'lead_source';
-      newNode.data.value = 'Meta Ads';
+      newNode.data.field = LEAD_FIELDS[0].id;
+      newNode.data.value = SOURCE_VALUES[0];
     }
-    if (type === 'actionNode') newNode.data.templateName = 'wa_welcome_meta';
+    if (type === 'actionNode') newNode.data.templateName = Object.keys(TEMPLATE_SIDS)[0];
 
     setNodes((nds) => [...nds, newNode]);
     setSelectedNodeId(id);
@@ -154,6 +156,8 @@ export default function LogicBuilderCanvas() {
       setIsSaving(false);
     }
   };
+
+  const templateOptions = Object.keys(TEMPLATE_SIDS);
 
   return (
     <div className="h-screen w-full flex flex-col font-sans">
@@ -192,9 +196,9 @@ export default function LogicBuilderCanvas() {
             <Panel position="top-left" className="bg-white/80 backdrop-blur p-4 rounded-xl shadow-lg border border-white m-4 flex flex-col gap-3">
               <div className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Inventory</div>
               <div className="flex gap-2">
-                <button onClick={() => addNode('triggerNode')} className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm"><Plus size={20}/></button>
-                <button onClick={() => addNode('conditionNode')} className="p-2 bg-yellow-50 text-yellow-600 rounded-lg border border-yellow-100 hover:bg-yellow-100 transition-colors shadow-sm"><Plus size={20}/></button>
-                <button onClick={() => addNode('actionNode')} className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 transition-colors shadow-sm"><Plus size={20}/></button>
+                <button onClick={() => addNode('triggerNode')} title="Add Trigger" className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm"><Plus size={20}/></button>
+                <button onClick={() => addNode('conditionNode')} title="Add Condition" className="p-2 bg-yellow-50 text-yellow-600 rounded-lg border border-yellow-100 hover:bg-yellow-100 transition-colors shadow-sm"><Plus size={20}/></button>
+                <button onClick={() => addNode('actionNode')} title="Add Action" className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 transition-colors shadow-sm"><Plus size={20}/></button>
               </div>
             </Panel>
           </ReactFlow>
@@ -218,20 +222,22 @@ export default function LogicBuilderCanvas() {
             <div className="p-6 flex flex-col gap-6 overflow-y-auto">
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Node ID</label>
-                <div className="bg-gray-100 p-2 rounded text-sm text-gray-600 font-mono">{selectedNode.id}</div>
+                <div className="bg-gray-100 p-2 rounded text-sm text-gray-600 font-mono italic">{selectedNode.id}</div>
               </div>
 
               {selectedNode.type === 'triggerNode' && (
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Trigger State</label>
-                  <input 
-                    type="text"
+                  <select 
                     value={selectedNode.data.state || ''}
                     onChange={(e) => updateNodeData(selectedNode.id, { state: e.target.value })}
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-inner bg-gray-50"
-                    placeholder="e.g. wa_pending"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2">The lead state that triggers this workflow entry.</p>
+                  >
+                    {WORKFLOW_STATES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-2 italic">The lead state that triggers this workflow entry.</p>
                 </div>
               )}
 
@@ -239,23 +245,37 @@ export default function LogicBuilderCanvas() {
                 <>
                   <div>
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Lead Field</label>
-                    <input 
-                      type="text"
+                    <select 
                       value={selectedNode.data.field || ''}
                       onChange={(e) => updateNodeData(selectedNode.id, { field: e.target.value })}
                       className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none shadow-inner bg-gray-50"
-                      placeholder="e.g. lead_source"
-                    />
+                    >
+                      {LEAD_FIELDS.map(f => (
+                        <option key={f.id} value={f.id}>{f.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Equals Value</label>
-                    <input 
-                      type="text"
-                      value={selectedNode.data.value || ''}
-                      onChange={(e) => updateNodeData(selectedNode.id, { value: e.target.value })}
-                      className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none shadow-inner bg-gray-50"
-                      placeholder="e.g. Meta Ads"
-                    />
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Compare Value</label>
+                    {selectedNode.data.field === 'lead_source' ? (
+                      <select 
+                        value={selectedNode.data.value || ''}
+                        onChange={(e) => updateNodeData(selectedNode.id, { value: e.target.value })}
+                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none shadow-inner bg-gray-50"
+                      >
+                        {SOURCE_VALUES.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text"
+                        value={selectedNode.data.value || ''}
+                        onChange={(e) => updateNodeData(selectedNode.id, { value: e.target.value })}
+                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none shadow-inner bg-gray-50"
+                        placeholder="e.g. Meta Ads"
+                      />
+                    )}
                   </div>
                 </>
               )}
@@ -263,13 +283,16 @@ export default function LogicBuilderCanvas() {
               {selectedNode.type === 'actionNode' && (
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Template Name</label>
-                  <input 
-                    type="text"
+                  <select 
                     value={selectedNode.data.templateName || ''}
                     onChange={(e) => updateNodeData(selectedNode.id, { templateName: e.target.value })}
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none shadow-inner bg-gray-50"
-                    placeholder="e.g. wa_welcome_meta"
-                  />
+                  >
+                    {templateOptions.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-2 italic">Select from your approved Twilio Content SIDs.</p>
                 </div>
               )}
 
