@@ -92,6 +92,7 @@ All secrets are stored in **Vercel → Project Settings → Environment Variable
 | `TWILIO_ACCOUNT_SID` | Twilio Console → Account Info | Twilio account identifier |
 | `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info | Twilio API auth + webhook signature validation |
 | `TWILIO_WEBHOOK_SECRET` | Same as `TWILIO_AUTH_TOKEN` (optional override) | Validates `x-twilio-signature` on inbound webhooks |
+| `TWILIO_MESSAGING_SERVICE_SID` | Twilio Console → Messaging → Services | **Required** for Content API (HX...) template sending. Value: `MG4b7040930f5d63bc27d808429106136a` |
 | `ZOHO_WEBHOOK_SECRET` | User-defined shared secret | HMAC SHA256 validation of Zoho payloads |
 | `CRON_SECRET` | User-defined (e.g. `le_cron_secret_2026`) | `Authorization: Bearer <secret>` header for cron endpoints |
 | `NODE_ENV` | Auto-set by Vercel | `production` / `development` |
@@ -105,6 +106,8 @@ All secrets are stored in **Vercel → Project Settings → Environment Variable
 - **Status Callback URL:** `https://le-whatsapp-engine.vercel.app/api/webhooks/twilio/status`
 - **Method:** HTTP POST (both)
 - **Location in Console:** Messaging → Senders → WhatsApp senders → `+917709333161`
+- **Messaging Service SID:** `MG4b7040930f5d63bc27d808429106136a` — Required for all Content API template sends. This is how Twilio resolves the template language/locale.
+- **Geo Permissions:** India (`+91`) must be checked under Console → Geo Permissions for delivery to Indian numbers.
 
 ### cron-job.org
 - **4 cron jobs** configured (see table above)

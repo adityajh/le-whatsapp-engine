@@ -3,6 +3,25 @@
 All notable changes to the Let's Enterprise WhatsApp Engine project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.2.0] - 2026-03-25 (Outbound Dispatch Debugging & Documentation)
+### Added
+- **Messaging Service SID Support**: Dispatcher now requires `TWILIO_MESSAGING_SERVICE_SID` (MG...) env var. Twilio Content API templates (HX...) require a Messaging Service SID — sending with a `from` phone number alone causes error 63027.
+- **Centralized Constants** (`src/lib/constants.ts`): Single source of truth for all template SIDs, workflow states, and lead fields. Both the Logic Builder UI and the Rules Engine import from this file.
+- **Logic Builder Dropdowns**: Replaced free-form text inputs in the node properties panel with dynamic dropdowns for States, Lead Fields, and Templates. Dropdowns auto-populate from `constants.ts`.
+- **Verbose Dispatcher Logging**: Dispatcher now logs the full Twilio payload and structured error (`code`, `status`, `moreInfo`) on failure, making production debugging much faster.
+- **`TWILIO_MESSAGING_SERVICE_SID` Env Var**: Added to `config.ts` schema. Value: `MG4b7040930f5d63bc27d808429106136a`.
+
+### Fixed
+- **Twilio Error 63027 (Root Cause)**: Content API templates (`HX...` SIDs) _must_ be sent with a `messagingServiceSid`. Previous code sent with only a `from` phone number, which is invalid since April 2025.
+- **Zoho Reconcile Cron 405**: Added `POST` handler to `/api/cron/zoho-reconcile`. `cron-job.org` sends POST requests; the GET-only route was throwing 405 errors.
+- **`contentVariables` Format**: Stopped passing `contentVariables: {}` (empty object) for templates with no variables. Empty object triggers 63027; the fix is to omit the field entirely.
+- **Cron Stripping Variables**: `process-queue` cron was not passing `contentVariables` from queue payloads to the dispatcher. Fixed to spread the full payload.
+- **Lead Name Variable**: Rules engine now passes `{ "1": lead.name || "there" }` as content variables so templates with `{{1}}` placeholders resolve correctly.
+
+### Changed
+- **Geo-Permissions**: User enabled India in Twilio Console → Geo Permissions to unblock delivery to `+91` numbers.
+- **Dispatcher Architecture**: `from` phone number is now a fallback only; `messagingServiceSid` takes priority when available.
+
 ## [2.1.0] - 2026-03-25 (Week 3 + Production Deployment)
 ### Added
 - **SLA Monitor Dashboard**: Built `/admin/sla-monitor` — a real-time table showing all leads ticking toward or past their human response SLA deadline. Breached leads highlighted in red.

@@ -2,7 +2,7 @@
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
 **Last Updated:** 25 March 2026
-**Status:** ✅ PRODUCTION — Live and verified end-to-end
+**Status:** 🟡 PRODUCTION — Live but outbound delivery still unconfirmed (Twilio 63027 under investigation)
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -145,8 +145,15 @@
 - [x] Build re-engagement sequence — 7-day dormant → `wa_reengaged` state (via `/api/cron/reengagement`)
 - [x] Build source-based routing (Meta Ads / Organic / Manual → different first templates via Rules Engine)
 - [x] Define and implement owner assignment logic on lead reply (`team@letsenterprise.in`)
-- [x] Fix: Twilio 63027 Error (Content API variables format)
-- [x] Fix: Zoho Reconcile 405/HTTP Error (Added POST support)
+- [~] Fix: Twilio Error 63027 — **Under active investigation**
+  - Added `messagingServiceSid` (MG…) to dispatcher — required for all Content API template sends since April 2025
+  - Fixed empty `contentVariables: {}` causing 63027 even when no variables needed
+  - Fixed `process-queue` cron stripping variables from outbound payload
+  - Lead name now passed as `{{ 1 }}` to all templates
+  - Enabled India Geo Permissions in Twilio Console
+  - Set up Twilio Messaging Service (`MG4b7040930f5d63bc27d808429106136a`) and added WhatsApp sender
+  - Deployed to production — still investigating root cause of persistent 63027
+- [x] Fix: Zoho Reconcile 405/HTTP Error (Added POST support to cron route)
 
 ### Logic Builder UI & Runtime
 - [x] Build Logic Builder — visual FSM editor (React Flow)
@@ -200,6 +207,9 @@
 | 5 | 24 Mar | Vercel Hobby plan limits crons to daily only | Code Agent | ✅ Resolved | External cron-job.org handles per-minute scheduling |
 | 6 | 24 Mar | BullMQ TCP incompatible with Upstash serverless | Code Agent | ✅ Resolved | Replaced with pure Upstash REST rpush/lpop |
 | 7 | 24 Mar | Vercel GitHub webhook stopped triggering builds | Ops | ✅ Resolved | Using `vercel --prod` CLI deploys |
+| 8 | 25 Mar | Twilio error 63027 — templates not delivering | Code Agent | 🟡 In Progress | Root cause: Content API templates require `messagingServiceSid`. Messaging Service created and wired. Still debugging. |
+| 9 | 25 Mar | Twilio Geo Permissions blocked India delivery | Ops | ✅ Resolved | User enabled India in Twilio Console → Geo Permissions |
+| 10 | 25 Mar | Messaging Service A2P 10DLC blocked WhatsApp sender | Ops | ✅ Resolved | Used WhatsApp-specific sender flow to bypass A2P SMS requirement |
 
 ---
 
@@ -217,7 +227,10 @@
 | 24 Mar | Queue system | Upstash REST (rpush/lpop) | BullMQ (incompatible with serverless) |
 | 24 Mar | Cron scheduling | cron-job.org (free) | Vercel Cron (Hobby plan limits) |
 | 24 Mar | Deploy method | `vercel --prod` CLI | GitHub auto-deploy (webhook broken) |
-| 25 Mar | Admin dashboard | Centralized `/admin` hub | Separate standalone pages |
+| 23 Mar | Admin dashboard | Centralized `/admin` hub | Separate standalone pages |
+| 25 Mar | Content API template delivery | Must use `messagingServiceSid` with Content SIDs (HX...) | Sending from bare phone number (unsupported since Apr 2025) |
+| 25 Mar | Twilio Messaging Service | Created dedicated WhatsApp service (`MG...`) | Not using a messaging service (blocked by A2P for SMS senders) |
+| 25 Mar | Template variable format | JSON.stringify contentVariables only when non-empty | Always pass `contentVariables: {}` (broken — causes 63027) |
 
 ---
 
