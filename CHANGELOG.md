@@ -3,6 +3,17 @@
 All notable changes to the Let's Enterprise WhatsApp Engine project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.3.0] - 2026-03-25 (Outbound Delivery Confirmed)
+### Added
+- **`wa_welcome_meta_2` Template**: Resubmitted `wa_welcome_meta` as a utility category template. Approved SID: `HXf346638884dd3f8121e9e620319c289c`. Template: *"Hey {{1}}, saw you checked out the Working BBA..."*
+- Added `wa_welcome_meta_2` to `TEMPLATE_SIDS` in `constants.ts`.
+- Updated Meta Ads fallback routing in `rulesEngine.ts` to use `wa_welcome_meta_2`.
+
+### Fixed
+- **Twilio 63027 — Resolved**: End-to-end delivery confirmed. Root cause was template category (marketing vs utility). Utility templates bypass stricter Content API restrictions.
+
+---
+
 ## [2.2.0] - 2026-03-25 (Outbound Dispatch Debugging & Documentation)
 ### Added
 - **Messaging Service SID Support**: Dispatcher now requires `TWILIO_MESSAGING_SERVICE_SID` (MG...) env var. Twilio Content API templates (HX...) require a Messaging Service SID — sending with a `from` phone number alone causes error 63027.
