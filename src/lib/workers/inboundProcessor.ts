@@ -1,36 +1,16 @@
-import { Job } from 'bullmq';
 import { supabase } from '@/lib/supabase';
+import { classifyReply } from '@/lib/engine/classifier';
 
-export async function processInboundMessage(job: Job) {
+export async function processInboundMessage(job: { data: Record<string, string> }) {
   const { MessageSid, From, Body } = job.data;
-  
+
   // Normalize Phone safely (strip whatsapp: and ensure +91)
   const phone = (From || '').replace('whatsapp:', '');
   const cleanPhone = phone.startsWith('+91') ? phone : (phone.length === 10 ? `+91${phone}` : phone);
 
-  // Classify intent according to Taxonomy
-  const lowerBody = (Body || '').toLowerCase();
-  let replyClass = 'other';
-  let waHotness = 'warm';
-  let waOptIn = true;
-
-  if (lowerBody.includes('stop') || lowerBody.includes('unsubscribe')) {
-    replyClass = 'stop';
-    waHotness = 'dead';
-    waOptIn = false;
-  } else if (lowerBody.includes('fee') || lowerBody.includes('price') || lowerBody.includes('cost')) {
-    replyClass = 'fee_question';
-    waHotness = 'warm';
-  } else if (lowerBody.includes('yes') || lowerBody.includes('interested') || lowerBody.includes('more')) {
-    replyClass = 'interested';
-    waHotness = 'hot';
-  } else if (lowerBody.includes('busy') || lowerBody.includes('not now') || lowerBody.includes('later')) {
-    replyClass = 'not_now';
-    waHotness = 'cold';
-  } else if (lowerBody.includes('wrong number') || lowerBody.includes('not me')) {
-    replyClass = 'wrong_number';
-    waHotness = 'dead';
-  }
+  // Classify intent using DB-driven rules
+  const { replyClass, hotness: waHotness, optOut } = await classifyReply(Body || '');
+  const waOptIn = !optOut;
 
   const now = new Date().toISOString();
 

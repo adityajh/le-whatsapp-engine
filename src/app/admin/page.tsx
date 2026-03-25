@@ -15,7 +15,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* Nav Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
 
         <Link href="/admin/logic-builder" className="group block">
           <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-blue-500 transition-all">
@@ -50,6 +50,18 @@ export default async function AdminDashboardPage() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-green-600 transition-colors">Bulk Campaign Manager</h3>
             <p className="text-gray-500 text-sm">Filter leads by segment and bulk launch templates into the rate-limited dispatch queue.</p>
+          </div>
+        </Link>
+
+        <Link href="/admin/classification" className="group block">
+          <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-orange-400 transition-all">
+            <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-orange-600 transition-colors">Reply Classification</h3>
+            <p className="text-gray-500 text-sm">Edit keywords that classify incoming WhatsApp replies into interested, fee query, stop, and more.</p>
           </div>
         </Link>
 
