@@ -2,7 +2,7 @@
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
 **Last Updated:** 25 March 2026
-**Status:** 🟢 PRODUCTION — Live. Outbound delivery confirmed 25 Mar 2026.
+**Status:** 🟢 PRODUCTION — Live. Outbound delivery confirmed. Admin UI complete.
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -20,7 +20,7 @@
 | Week 1 — Go Live | 16 | 16 | 0 | 0 |
 | Week 2 — Stability + Campaigns | 10 | 10 | 0 | 0 |
 | Week 3 — Intelligence + Logic Builder | 8 | 8 | 0 | 0 |
-| Week 4 — Optimisation | 10 | 3 | 0 | 0 |
+| Week 4 — Optimisation | 10 | 7 | 0 | 0 |
 
 ---
 
@@ -169,11 +169,13 @@
 ---
 
 ## 🟡 WEEK 4 — OPTIMISATION + MONITORING
-> Status: 🟡 In Progress. Dashboard hub and cron-job.org done. Analytics remaining.
+> Status: 🟡 In Progress. Admin UI, analytics, and classification complete. Remaining: reliability + A/B.
 
 ### Admin Dashboard
 - [x] Build centralized Admin Dashboard (`/admin`) with card navigation to all tools
 - [x] Root redirect (`/` → `/admin`)
+- [x] Shared admin layout with top nav bar (Control Hub home link on all pages)
+- [x] Consistent light theme across all admin pages (dark mode override removed)
 
 ### Reliability Enhancements
 - [x] Set up [cron-job.org](https://cron-job.org) — 4 jobs: process-queue (1 min), sla-monitor (5 min), zoho-reconcile (60 min), reengagement (24h)
@@ -183,13 +185,16 @@
 - [ ] Build retry with exponential backoff across all outbound calls
 
 ### Analytics & A/B
-- [ ] Build template performance tracking (reply rate per `template_variant_id`)
+- [x] Build template performance tracking — `/admin/analytics` (sent/delivered/read/failed/replied per template, delivery % and reply % with colour-coded badges)
+- [x] Build campaign analytics — `/admin/campaigns` shows per-campaign funnel and reply rate inline
 - [ ] Build conversion tracking (lead stage progression through FSM)
 - [ ] Document first A/B test results
 
 ### Dashboard Expansion
+- [x] `/admin/templates` — live Twilio template list with approval status, Refresh button, cache-bust endpoint
+- [x] `/admin/classification` — DB-driven keyword editor for reply classification (6 classes, Hinglish keywords, Redis-cached, save busts cache)
+- [x] Auto-discover templates from Twilio Content API — Logic Builder dropdown and rules engine no longer need manual `constants.ts` updates
 - [ ] Events list, lead detail view, message history per lead
-- [ ] Campaign analytics (sent/delivered/read/replied per campaign)
 - [ ] Sender quality score view (per `sender_profiles`)
 - [ ] Set up weekly WhatsApp quality score review process (Twilio dashboard)
 - [ ] Auto-pause campaign sends when sender quality score = LOW
@@ -232,6 +237,9 @@
 | 25 Mar | Content API template delivery | Must use `messagingServiceSid` with Content SIDs (HX...) | Sending from bare phone number (unsupported since Apr 2025) |
 | 25 Mar | Twilio Messaging Service | Created dedicated WhatsApp service (`MG...`) | Not using a messaging service (blocked by A2P for SMS senders) |
 | 25 Mar | Template variable format | JSON.stringify contentVariables only when non-empty | Always pass `contentVariables: {}` (broken — causes 63027) |
+| 25 Mar | Template discovery | Live Twilio Content API (`/v1/Content`) with Upstash cache (1hr TTL) | Manual `constants.ts` updates |
+| 25 Mar | Reply classification | DB-driven keyword rules (`classification_rules` table) with Redis cache (30min) | Hardcoded `if/else` in processor |
+| 25 Mar | Classification fallback | Hardcoded rules in `classifier.ts` if DB unreachable | No fallback (would break inbound processing) |
 
 ---
 

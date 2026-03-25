@@ -24,6 +24,7 @@ Zoho CRM ──webhook──► Vercel (Next.js App Router)
               (React Flow)          │           │
                                 Classify      Update
                                 Reply         Supabase
+                                (DB rules)
                                     │
                               ──► Twilio WhatsApp API ──► Lead's Phone
 ```
@@ -50,8 +51,11 @@ Zoho CRM ──webhook──► Vercel (Next.js App Router)
 | **Control Hub** | `/admin` | Central dashboard linking all tools |
 | **Logic Builder** | `/admin/logic-builder` | Visual drag-and-drop state machine editor (React Flow) |
 | **SLA Monitor** | `/admin/sla-monitor` | Table of leads ticking toward SLA breach |
-| **Campaign Manager** | `/admin/campaigns` | Create and manage bulk WhatsApp campaigns |
-| **Create Campaign** | `/admin/campaigns/create` | Form to segment leads and schedule batch sends |
+| **Campaign Manager** | `/admin/campaigns` | Manage bulk WhatsApp campaigns with per-campaign funnel stats |
+| **Create Campaign** | `/admin/campaigns/create` | Form to segment leads and launch batch sends |
+| **Reply Classification** | `/admin/classification` | Edit keywords per reply class — no deploy needed |
+| **Template Analytics** | `/admin/analytics` | Delivery %, reply %, per-template performance breakdown |
+| **WhatsApp Templates** | `/admin/templates` | Live Twilio template list with approval status and Refresh |
 
 ---
 
@@ -76,6 +80,8 @@ Zoho CRM ──webhook──► Vercel (Next.js App Router)
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/admin/workflow` | POST | Save Logic Builder graph to `workflow_rules` table |
+| `/api/admin/templates` | GET | List approved Twilio templates (cached 1hr in Redis) |
+| `/api/admin/templates/refresh` | POST | Bust Twilio template cache and reload |
 
 ---
 
@@ -106,8 +112,9 @@ All secrets are stored in **Vercel → Project Settings → Environment Variable
 - **Status Callback URL:** `https://le-whatsapp-engine.vercel.app/api/webhooks/twilio/status`
 - **Method:** HTTP POST (both)
 - **Location in Console:** Messaging → Senders → WhatsApp senders → `+917709333161`
-- **Messaging Service SID:** `MG4b7040930f5d63bc27d808429106136a` — Required for all Content API template sends. This is how Twilio resolves the template language/locale.
-- **Geo Permissions:** India (`+91`) must be checked under Console → Geo Permissions for delivery to Indian numbers.
+- **Messaging Service SID:** `MG4b7040930f5d63bc27d808429106136a` — Required for all Content API template sends.
+- **Geo Permissions:** India (`+91`) must be checked under Console → Geo Permissions.
+- **Template discovery:** Templates are fetched live from `https://content.twilio.com/v1/Content` — no manual config needed when adding new templates. Hit Refresh in `/admin/templates` after changes.
 
 ### cron-job.org
 - **4 cron jobs** configured (see table above)
@@ -117,19 +124,6 @@ All secrets are stored in **Vercel → Project Settings → Environment Variable
 ### Zoho CRM (Planned)
 - Workflow Rules on Leads module post to `/api/webhooks/zoho`
 - Include `x-zoho-signature` header with HMAC SHA256 of body using shared secret
-
----
-
-## Approved WhatsApp Templates (Twilio Content SIDs)
-
-| Template Name | Content SID |
-|---|---|
-| `wa_welcome_manual` | `HX23923d44f51d9a7da14f22cf109ac576` |
-| `wa_welcome_organic` | `HX56142f55de8db39eaadc7ad5fc7aff03` |
-| `wa_welcome_meta` | `HXd3cf40ca8ed1b0fa7bc74cfa9a901887` |
-| `wa_counsellor_intro` | `HX8241ba1ede5451b564660006d059faa2` |
-| `wa_reengagement` | `HXb0be78e0070d3153d3c1d5d62410b74a` |
-| `wa_followup_1` | `HXf0af953383a41a1ac25ba99cf8435c8d` |
 
 ---
 
@@ -144,12 +138,18 @@ All secrets are stored in **Vercel → Project Settings → Environment Variable
 | `workflow_rules` | Logic Builder graph (React Flow JSON) |
 | `campaigns` | Campaign definitions (name, template, segment) |
 | `campaign_leads` | Per-lead tracking within each campaign |
+| `classification_rules` | Keyword rules per reply class — editable from admin UI |
 
-Migrations: `supabase/migrations/20260323_init_schema.sql` and `20260324_campaign_tracking.sql`
+Migrations:
+- `supabase/migrations/20260323_init_schema.sql`
+- `supabase/migrations/20260324_campaign_tracking.sql`
+- `supabase/migrations/20260325_classification_rules.sql`
 
 ---
 
-## Reply Classification Taxonomy
+## Reply Classification
+
+Keywords are stored in the `classification_rules` table and editable at `/admin/classification` — no deploy needed. Cached in Redis (30min TTL), cache busted on save.
 
 | Class | Hotness | Next Action |
 |---|---|---|

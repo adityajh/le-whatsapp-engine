@@ -3,6 +3,29 @@
 All notable changes to the Let's Enterprise WhatsApp Engine project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.5.0] - 2026-03-25 (Admin UI Overhaul + Classification Engine)
+### Added
+- **DB-driven Reply Classification** (`src/lib/engine/classifier.ts`): Keywords per class stored in `classification_rules` Supabase table. Cached in Upstash Redis (30min TTL). Hardcoded fallback if DB unreachable.
+- **`/admin/classification` page**: Edit keyword chips per class (interested, fee_question, not_now, wrong_number, stop, other). Add/remove/save with cache bust on save. Includes Hinglish keywords out of the box.
+- **`/admin/templates` page**: Dedicated page showing all Twilio templates with approval status (approved/pending/rejected) and summary counts. Refresh button busts cache and reloads.
+- **`/admin/analytics` page**: Template performance tracking — per-template sent/delivered/read/failed/replied counts, delivery % and reply % with colour-coded badges.
+- **Campaign analytics inline**: `/admin/campaigns` now shows per-campaign funnel (total/sent/delivered/replied/failed) and reply rate % badge.
+- **Shared admin layout** (`src/app/admin/layout.tsx`): Top nav bar with "Control Hub" home link across all admin pages.
+- **`POST /api/admin/templates/refresh`**: Cache-bust endpoint for Twilio template list.
+- **`GET /api/admin/templates`**: Returns live approved templates for Logic Builder dropdown.
+
+### Fixed
+- **Dark mode on admin UI**: Removed `prefers-color-scheme: dark` override from `globals.css` — admin tool always renders light.
+- **Twilio Content API URL**: Was `/v1/Contents` (404) → corrected to `/v1/Content`. Approval status now fetched per-template via parallel `ApprovalRequests` calls.
+- **Logic Builder canvas height**: Adjusted to `calc(100vh - 49px)` to account for new shared nav bar.
+
+### Changed
+- **Template discovery**: Logic Builder dropdown, rules engine, and analytics now pull templates live from Twilio Content API (cached). `constants.ts` remains as fast fallback only — no longer needs manual updates when templates are added/deleted.
+- **`inboundProcessor.ts`**: Replaced hardcoded `if/else` classification block with `classifyReply()` call.
+- **Admin hub**: 6-card grid (3-col) linking to all tools — Logic Builder, SLA Monitor, Campaigns, Classification, Analytics, Templates.
+
+---
+
 ## [2.3.0] - 2026-03-25 (Outbound Delivery Confirmed)
 ### Added
 - **`wa_welcome_meta_2` Template**: Resubmitted `wa_welcome_meta` as a utility category template. Approved SID: `HXf346638884dd3f8121e9e620319c289c`. Template: *"Hey {{1}}, saw you checked out the Working BBA..."*
