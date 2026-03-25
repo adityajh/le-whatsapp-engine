@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { getTwilioTemplates } from '@/lib/twilio/templates';
+import { getTwilioTemplates, getApprovedTemplates } from '@/lib/twilio/templates';
 import { TEMPLATE_SIDS } from '@/lib/constants';
 
 export const revalidate = 0;
@@ -16,7 +16,7 @@ type TemplateStats = {
 
 export default async function AnalyticsPage() {
   // Build lookup maps from live Twilio + constants fallback
-  const liveTemplates = await getTwilioTemplates().catch(() => []);
+  const liveTemplates = await getApprovedTemplates().catch(() => []);
   const SID_TO_NAME: Record<string, string> = {
     ...Object.fromEntries(Object.entries(TEMPLATE_SIDS).map(([name, sid]) => [sid, name])),
     ...Object.fromEntries(liveTemplates.map((t) => [t.sid, t.name])),

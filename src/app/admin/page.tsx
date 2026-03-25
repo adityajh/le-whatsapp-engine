@@ -1,12 +1,6 @@
 import Link from 'next/link';
-import { getTwilioTemplates } from '@/lib/twilio/templates';
-import RefreshTemplatesButton from '@/components/admin/RefreshTemplatesButton';
 
-export const revalidate = 0;
-
-export default async function AdminDashboardPage() {
-  const templates = await getTwilioTemplates().catch(() => []);
-
+export default function AdminDashboardPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-10">
       <div className="border-b pb-6">
@@ -14,8 +8,7 @@ export default async function AdminDashboardPage() {
         <p className="text-lg text-gray-500 mt-2">Manage your automated WhatsApp logic, campaigns, and lead SLAs.</p>
       </div>
 
-      {/* Nav Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
         <Link href="/admin/logic-builder" className="group block">
           <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-blue-500 transition-all">
@@ -77,51 +70,19 @@ export default async function AdminDashboardPage() {
           </div>
         </Link>
 
-      </div>
-
-      {/* Approved Templates */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Approved Templates</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Live from Twilio Content API · {templates.length} approved</p>
+        <Link href="/admin/templates" className="group block">
+          <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-teal-500 transition-all">
+            <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-teal-600 transition-colors">WhatsApp Templates</h3>
+            <p className="text-gray-500 text-sm">View all templates from Twilio with approval status. Refresh to sync after adding or deleting.</p>
           </div>
-          <RefreshTemplatesButton />
-        </div>
+        </Link>
 
-        <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b">
-                <th className="p-4 font-semibold text-gray-700">Template Name</th>
-                <th className="p-4 font-semibold text-gray-700">Content SID</th>
-                <th className="p-4 font-semibold text-gray-700">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((t) => (
-                <tr key={t.sid} className="border-b last:border-0 hover:bg-gray-50/50">
-                  <td className="p-4 font-medium text-gray-900">{t.name}</td>
-                  <td className="p-4 font-mono text-sm text-gray-500">{t.sid}</td>
-                  <td className="p-4">
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      approved
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {templates.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="p-8 text-center text-gray-500">
-                    No approved templates found. Check your Twilio credentials or hit Refresh.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
-
     </div>
   );
 }
