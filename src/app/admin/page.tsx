@@ -8,7 +8,7 @@ export default function AdminDashboardPage() {
         <p className="text-lg text-gray-500 mt-2">Manage your automated WhatsApp logic, campaigns, and lead SLAs.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4">
         
         {/* Logic Builder Card */}
         <Link href="/admin/logic-builder" className="group block">
@@ -51,6 +51,21 @@ export default function AdminDashboardPage() {
             <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-green-600 transition-colors">Bulk Campaign Manager</h3>
             <p className="text-gray-500 text-sm">
               Filter leads by segment attributes and bulk launch templates directly into the rate-limited dispatch queue.
+            </p>
+          </div>
+        </Link>
+
+        {/* Analytics Card */}
+        <Link href="/admin/analytics" className="group block">
+          <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-purple-500 transition-all">
+            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-purple-600 transition-colors">Template Analytics</h3>
+            <p className="text-gray-500 text-sm">
+              Reply rates, delivery rates, and performance breakdown per WhatsApp template.
             </p>
           </div>
         </Link>
