@@ -44,9 +44,15 @@ export async function dispatchMessage(opts: DispatchOptions) {
       return null;
     }
     const messageParams: any = {
-      from: `whatsapp:${opts.from}`,
       to: `whatsapp:${opts.to}`,
     };
+
+    // Use Messaging Service SID if available, otherwise fallback to 'from' phone
+    if (config.TWILIO_MESSAGING_SERVICE_SID) {
+      messageParams.messagingServiceSid = config.TWILIO_MESSAGING_SERVICE_SID;
+    } else {
+      messageParams.from = `whatsapp:${opts.from}`;
+    }
 
     if (opts.body) {
       messageParams.body = opts.body;
@@ -54,18 +60,12 @@ export async function dispatchMessage(opts: DispatchOptions) {
 
     if (opts.contentSid) {
       messageParams.contentSid = opts.contentSid;
-      // CRITICAL: Do NOT pass contentVariables at all for templates
-      // without variables. Passing even {} causes Twilio error 63027.
       if (opts.contentVariables && Object.keys(opts.contentVariables).length > 0) {
         messageParams.contentVariables = JSON.stringify(opts.contentVariables);
       }
     }
 
-    console.log(`[Dispatcher] Sending to ${opts.to} with SID: ${opts.contentSid || 'none'}`);
-
-    if (opts.mediaUrl && opts.mediaUrl.length > 0) {
-      messageParams.mediaUrl = opts.mediaUrl;
-    }
+    console.log(`[Dispatcher] Twilio Payload:`, JSON.stringify(messageParams, null, 2));
 
     const message = await twilioClient.messages.create(messageParams);
     

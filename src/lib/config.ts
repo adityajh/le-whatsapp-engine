@@ -12,7 +12,8 @@ const envSchema = z.object({
   // Twilio
   TWILIO_ACCOUNT_SID: z.string().min(1),
   TWILIO_AUTH_TOKEN: z.string().min(1),
-  TWILIO_WEBHOOK_SECRET: z.string().min(1).optional(), // Optional for now
+  TWILIO_WEBHOOK_SECRET: z.string().min(1).optional(),
+  TWILIO_MESSAGING_SERVICE_SID: z.string().startsWith('MG').optional(),
 
   // Zoho
   ZOHO_WEBHOOK_SECRET: z.string().min(1), // Used to validate incoming HMAC signatures
@@ -30,6 +31,7 @@ const result = envSchema.safeParse({
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
   TWILIO_WEBHOOK_SECRET: process.env.TWILIO_WEBHOOK_SECRET,
+  TWILIO_MESSAGING_SERVICE_SID: process.env.TWILIO_MESSAGING_SERVICE_SID,
   ZOHO_WEBHOOK_SECRET: process.env.ZOHO_WEBHOOK_SECRET,
   NODE_ENV: process.env.NODE_ENV,
 });
