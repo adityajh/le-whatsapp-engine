@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -18,7 +18,7 @@ import 'reactflow/dist/style.css';
 import { X, Save, Plus } from 'lucide-react';
 
 import { TriggerNode, ConditionNode, ActionNode, EndNode } from './Nodes';
-import { TEMPLATE_SIDS, WORKFLOW_STATES, LEAD_FIELDS, SOURCE_VALUES } from '@/lib/constants';
+import { WORKFLOW_STATES, LEAD_FIELDS, SOURCE_VALUES } from '@/lib/constants';
 
 const nodeTypes = {
   triggerNode: TriggerNode,
@@ -65,6 +65,14 @@ export default function LogicBuilderCanvas() {
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [twilioTemplates, setTwilioTemplates] = useState<{ sid: string; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/admin/templates')
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setTwilioTemplates(data))
+      .catch((err) => console.error('[LogicBuilder] Failed to load templates:', err));
+  }, []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -132,7 +140,7 @@ export default function LogicBuilderCanvas() {
       newNode.data.field = LEAD_FIELDS[0].id;
       newNode.data.value = SOURCE_VALUES[0];
     }
-    if (type === 'actionNode') newNode.data.templateName = Object.keys(TEMPLATE_SIDS)[0];
+    if (type === 'actionNode') newNode.data.templateName = twilioTemplates[0]?.name ?? '';
 
     setNodes((nds) => [...nds, newNode]);
     setSelectedNodeId(id);
@@ -157,7 +165,7 @@ export default function LogicBuilderCanvas() {
     }
   };
 
-  const templateOptions = Object.keys(TEMPLATE_SIDS);
+  const templateOptions = twilioTemplates.map((t) => t.name);
 
   return (
     <div className="h-screen w-full flex flex-col font-sans">

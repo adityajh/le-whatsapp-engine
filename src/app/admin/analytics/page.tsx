@@ -1,12 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import { getTwilioTemplates } from '@/lib/twilio/templates';
 import { TEMPLATE_SIDS } from '@/lib/constants';
 
 export const revalidate = 0;
-
-// Reverse map: SID → template name
-const SID_TO_NAME: Record<string, string> = Object.fromEntries(
-  Object.entries(TEMPLATE_SIDS).map(([name, sid]) => [sid, name])
-);
 
 type TemplateStats = {
   sid: string;
@@ -19,6 +15,17 @@ type TemplateStats = {
 };
 
 export default async function AnalyticsPage() {
+  // Build lookup maps from live Twilio + constants fallback
+  const liveTemplates = await getTwilioTemplates().catch(() => []);
+  const SID_TO_NAME: Record<string, string> = {
+    ...Object.fromEntries(Object.entries(TEMPLATE_SIDS).map(([name, sid]) => [sid, name])),
+    ...Object.fromEntries(liveTemplates.map((t) => [t.sid, t.name])),
+  };
+  const NAME_TO_SID: Record<string, string> = {
+    ...TEMPLATE_SIDS,
+    ...Object.fromEntries(liveTemplates.map((t) => [t.name, t.sid])),
+  };
+
   // All outbound messages
   const { data: messages, error: msgError } = await supabase
     .from('messages')
@@ -66,7 +73,7 @@ export default async function AnalyticsPage() {
   // Count replies per template name (via wa_last_template on leads)
   for (const lead of leads || []) {
     if (!lead.wa_reply_class || !lead.wa_last_template) continue;
-    const sid = TEMPLATE_SIDS[lead.wa_last_template];
+    const sid = NAME_TO_SID[lead.wa_last_template];
     if (sid && statsMap[sid]) {
       statsMap[sid].replied++;
     }

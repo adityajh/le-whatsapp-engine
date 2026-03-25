@@ -2,7 +2,7 @@ import { Lead, supabase } from '../supabase';
 import { isWithin24HourSession, isWithinSendWindow } from './sessionWindow';
 import { evaluateWorkflowGraph } from './logicEvaluator';
 import { enqueueOutboundMessage } from '../queue/client';
-import { TEMPLATE_SIDS } from '../constants';
+import { getTwilioTemplateSid } from '../twilio/templates';
 
 // Primary live WhatsApp sender (Let's Enterprise)
 const PRIMARY_SENDER = '+917709333161';
@@ -81,8 +81,8 @@ export async function evaluateLeadAction(lead: Lead) {
     }
   }
 
-  // Resolve SID from template name
-  const contentSid = TEMPLATE_SIDS[templateName];
+  // Resolve SID from template name (checks constants, then live Twilio lookup)
+  const contentSid = await getTwilioTemplateSid(templateName);
   if (!contentSid) {
     console.error(`[Rules Engine] Unknown template name "${templateName}" — no SID mapping. Skipping.`);
     return;
