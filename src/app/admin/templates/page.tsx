@@ -46,10 +46,10 @@ export default async function TemplatesPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b">
-              <th className="p-4 font-semibold text-gray-700">Template Name</th>
+              <th className="p-4 font-semibold text-gray-700 w-36">Template Name</th>
               <th className="p-4 font-semibold text-gray-700">Message Body</th>
-              <th className="p-4 font-semibold text-gray-700">Content SID</th>
-              <th className="p-4 font-semibold text-gray-700">Status</th>
+              <th className="p-4 font-semibold text-gray-700 w-48">Content SID</th>
+              <th className="p-4 font-semibold text-gray-700 w-24">Status</th>
             </tr>
           </thead>
           <tbody>
