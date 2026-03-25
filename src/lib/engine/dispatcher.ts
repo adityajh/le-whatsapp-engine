@@ -55,10 +55,12 @@ export async function dispatchMessage(opts: DispatchOptions) {
     if (opts.contentSid) {
       // Using Twilio Content API (modern approach for templated messages)
       messageParams.contentSid = opts.contentSid;
-      if (opts.contentVariables) {
-        messageParams.contentVariables = JSON.stringify(opts.contentVariables);
-      }
+      // Note: The Twilio Node SDK expects an OBJECT for contentVariables, 
+      // not a JSON string. stringifying it can cause 63027 errors.
+      messageParams.contentVariables = opts.contentVariables || {};
     }
+
+    console.log(`[Dispatcher] Sending to ${opts.to} with SID: ${opts.contentSid || 'none'}`);
 
     if (opts.mediaUrl && opts.mediaUrl.length > 0) {
       messageParams.mediaUrl = opts.mediaUrl;

@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET(request: Request) {
+  return handleReconcile(request);
+}
+
+export async function POST(request: Request) {
+  return handleReconcile(request);
+}
+
+async function handleReconcile(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    console.error('[Reconcile] Unauthorized access attempt');
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
   console.log('[Cron] Starting Zoho reconciliation...');
+  // ... rest of the logic ...
 
   // Catch leads with missing WA_State but have opted in
   const { data: leads, error } = await supabase
