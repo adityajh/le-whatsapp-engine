@@ -97,6 +97,9 @@ export async function evaluateLeadAction(lead: Lead) {
     contentSid,
     templateName,
     leadId: lead.id,
+    // Pass variables (e.g. {{1}} for name)
+    // We stringify here because the queue client expects Record<string, string>
+    contentVariables: JSON.stringify({ "1": lead.name || "there" })
   });
 
 

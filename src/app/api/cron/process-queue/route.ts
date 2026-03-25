@@ -38,10 +38,12 @@ export async function GET(request: Request) {
       for (const data of delayedJobs) {
         try {
           const msg = await dispatchMessage({
-            to:         data.to,
-            from:       data.from,
-            contentSid: data.contentSid,
-          });
+            ...data,
+            to:         data.to as string,
+            from:       data.from as string,
+            contentSid: data.contentSid as string,
+            contentVariables: data.contentVariables ? JSON.parse(data.contentVariables as string) : undefined
+          } as any);
           if (msg) {
             results.push(`outbound_delayed:${data.to}:${msg.sid}`);
             console.log(`[Cron] Sent delayed ${data.contentSid} to ${data.to} — SID: ${msg.sid}`);
@@ -57,10 +59,12 @@ export async function GET(request: Request) {
     for (const data of outboundJobs) {
       try {
         const msg = await dispatchMessage({
-          to:         data.to,
-          from:       data.from,
-          contentSid: data.contentSid,
-        });
+          ...data,
+          to:         data.to as string,
+          from:       data.from as string,
+          contentSid: data.contentSid as string,
+          contentVariables: data.contentVariables ? JSON.parse(data.contentVariables as string) : undefined
+        } as any);
         if (msg) {
           results.push(`outbound:${data.to}:${msg.sid}`);
           console.log(`[Cron] Sent ${data.contentSid} to ${data.to} — SID: ${msg.sid}`);

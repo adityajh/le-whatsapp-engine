@@ -72,7 +72,12 @@ export async function dispatchMessage(opts: DispatchOptions) {
     console.log(`[Dispatcher] Successfully queued message SID: ${message.sid} to ${opts.to}`);
     return message;
   } catch (err: any) {
-    console.error(`[Dispatcher] Failed to dispatch message to ${opts.to}:`, err.message);
+    console.error(`[Dispatcher] Failed to dispatch message to ${opts.to}:`, {
+      message: err.message,
+      code: err.code,
+      moreInfo: err.moreInfo,
+      status: err.status,
+    });
     throw err;
   }
 }
