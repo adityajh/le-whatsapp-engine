@@ -30,8 +30,12 @@ export function evaluateWorkflowGraph(
   edges: ReactFlowEdge[]
 ): EvaluatedAction {
   // 1. Find the Trigger Node that matches the current state
+  // Check structured data.state first, then fallback to label parsing
   const triggerNode = nodes.find(
-    (n) => n.type === 'triggerNode' && n.data?.label?.includes(`State: ${triggerState}`)
+    (n) => n.type === 'triggerNode' && (
+      n.data?.state === triggerState || 
+      n.data?.label?.includes(`State: ${triggerState}`)
+    )
   );
 
   if (!triggerNode) {
@@ -51,12 +55,18 @@ function stepGraph(
   if (!currentNode) return { type: 'no_match' };
 
   if (currentNode.type === 'actionNode') {
-    // Looks like "Send Template: wa_welcome_meta"
+    // Check structured data.templateName first
+    const templateName = currentNode.data?.templateName || '';
+    if (templateName) {
+      return { type: 'send_template', templateName };
+    }
+
+    // Fallback: Label looks like "Send Template: wa_welcome_meta"
     const label = currentNode.data?.label || '';
     if (label.includes('Send Template:')) {
       const parts = label.split(':');
-      const templateName = parts[1]?.trim() || '';
-      return { type: 'send_template', templateName };
+      const extractedTemplate = parts[1]?.trim() || '';
+      return { type: 'send_template', templateName: extractedTemplate };
     }
   }
 
@@ -65,24 +75,27 @@ function stepGraph(
   }
 
   if (currentNode.type === 'triggerNode' || currentNode.type === 'conditionNode') {
-    // Find outgoing edges
     const outgoingEdges = edges.filter((e) => e.source === currentNode.id);
-
     if (outgoingEdges.length === 0) return { type: 'no_match' };
 
-    // Standard routing: If it's a trigger, there's usually 1 outgoing edge
     if (currentNode.type === 'triggerNode') {
       return stepGraph(outgoingEdges[0].target, lead, nodes, edges);
     }
 
-    // Condition routing: true/false handles
     if (currentNode.type === 'conditionNode') {
-      const conditionStr = currentNode.data?.label || '';
       let isTrue = false;
+      const { field, value, label } = currentNode.data || {};
 
-      // Evaluate logic (Simple parser for Phase 1 MVP based on Source)
-      if (conditionStr.toLowerCase().includes('source == meta ads')) {
-        isTrue = lead.lead_source?.toLowerCase().includes('meta') ? true : false;
+      // Structured evaluation
+      if (field && value) {
+        const leadValue = (lead as any)[field];
+        isTrue = String(leadValue).toLowerCase().includes(String(value).toLowerCase());
+      } else {
+        // Fallback: Label parsing (Simple parser for Phase 1 MVP based on Source)
+        const conditionStr = label || '';
+        if (conditionStr.toLowerCase().includes('source == meta ads')) {
+          isTrue = lead.lead_source?.toLowerCase().includes('meta') ? true : false;
+        }
       }
       
       const targetEdge = outgoingEdges.find((e) => e.sourceHandle === (isTrue ? 'true' : 'false'));
@@ -94,3 +107,4 @@ function stepGraph(
 
   return { type: 'no_match' };
 }
+
