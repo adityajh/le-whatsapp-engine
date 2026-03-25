@@ -14,14 +14,11 @@ export function isWithin24HourSession(lastInboundAt: string | null | undefined):
 }
 
 /**
- * Checks if current time is within 9am to 8pm IST (Indian Standard Time)
+ * Checks if current time is within 6am to 11pm IST (widened window for testing)
  * IST is UTC +5:30.
  */
 export function isWithinSendWindow(): boolean {
-  // Get current UTC time
   const now = new Date();
-  
-  // Calculate IST hours (quick math for IST = UTC + 5:30)
   const utcHours = now.getUTCHours();
   const utcMinutes = now.getUTCMinutes();
   
@@ -37,8 +34,9 @@ export function isWithinSendWindow(): boolean {
     istHours -= 24;
   }
 
-  // Window is 9:00 AM to 8:00 PM (20:00)
-  if (istHours >= 9 && istHours < 20) {
+  // Widened Window for Testing: 6:00 AM to 11:00 PM (23:00)
+  // Production will eventually tighten this back to 9-8
+  if (istHours >= 6 && istHours < 23) {
     return true;
   }
   
