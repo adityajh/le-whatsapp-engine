@@ -54,7 +54,7 @@ export async function evaluateLeadAction(lead: Lead) {
     // Fallback: route by lead_source directly
     const source = (lead.lead_source || '').toLowerCase();
     if (source.includes('meta') || source.includes('facebook')) {
-      templateName = 'wa_welcome_meta';
+      templateName = 'wa_welcome_meta_2';
     } else if (source.includes('organic') || source.includes('website')) {
       templateName = 'wa_welcome_organic';
     } else {

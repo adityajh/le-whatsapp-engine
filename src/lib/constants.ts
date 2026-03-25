@@ -11,6 +11,7 @@ export const TEMPLATE_SIDS: Record<string, string> = {
   wa_welcome_manual:   'HX23923d44f51d9a7da14f22cf109ac576',
   wa_welcome_organic:  'HX56142f55de8db39eaadc7ad5fc7aff03',
   wa_welcome_meta:     'HXd3cf40ca8ed1b0fa7bc74cfa9a901887',
+  wa_welcome_meta_2:   'HXf346638884dd3f8121e9e620319c289c',
   wa_counsellor_intro: 'HX8241ba1ede5451b564660006d059faa2',
   wa_reengagement:     'HXb0be78e0070d3153d3c1d5d62410b74a',
   wa_followup_1:       'HXf0af953383a41a1ac25ba99cf8435c8d',
