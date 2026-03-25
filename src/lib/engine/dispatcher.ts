@@ -47,10 +47,13 @@ export async function dispatchMessage(opts: DispatchOptions) {
       to: `whatsapp:${opts.to}`,
     };
 
-    // Use Messaging Service SID if available, otherwise fallback to 'from' phone
+    console.log('[Config] TWILIO_MESSAGING_SERVICE_SID:', config.TWILIO_MESSAGING_SERVICE_SID);
+
+    // Use Messaging Service SID if available, otherwise fallback (which will likely fail 63027)
     if (config.TWILIO_MESSAGING_SERVICE_SID) {
       messageParams.messagingServiceSid = config.TWILIO_MESSAGING_SERVICE_SID;
     } else {
+      console.warn('[Twilio] No MESSAGING_SERVICE_SID found in config. Falling back to from number.');
       messageParams.from = `whatsapp:${opts.from}`;
     }
 
@@ -60,12 +63,16 @@ export async function dispatchMessage(opts: DispatchOptions) {
 
     if (opts.contentSid) {
       messageParams.contentSid = opts.contentSid;
-      if (opts.contentVariables && Object.keys(opts.contentVariables).length > 0) {
-        messageParams.contentVariables = JSON.stringify(opts.contentVariables);
-      }
+      // Always send contentVariables if using contentSid, with a fallback
+      // Meta often rejects 63027 if a template expects variables and they are missing.
+      messageParams.contentVariables = JSON.stringify(
+        opts.contentVariables && Object.keys(opts.contentVariables).length > 0
+          ? opts.contentVariables
+          : { "1": "there" }
+      );
     }
 
-    console.log(`[Dispatcher] Twilio Payload:`, JSON.stringify(messageParams, null, 2));
+    console.log('[Twilio] messageParams:', JSON.stringify(messageParams, null, 2));
 
     const message = await twilioClient.messages.create(messageParams);
     
