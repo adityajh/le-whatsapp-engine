@@ -145,6 +145,8 @@
 - [x] Build re-engagement sequence — 7-day dormant → `wa_reengaged` state (via `/api/cron/reengagement`)
 - [x] Build source-based routing (Meta Ads / Organic / Manual → different first templates via Rules Engine)
 - [x] Define and implement owner assignment logic on lead reply (`team@letsenterprise.in`)
+- [x] Fix: Twilio 63027 Error (Content API variables format)
+- [x] Fix: Zoho Reconcile 405/HTTP Error (Added POST support)
 
 ### Logic Builder UI & Runtime
 - [x] Build Logic Builder — visual FSM editor (React Flow)
