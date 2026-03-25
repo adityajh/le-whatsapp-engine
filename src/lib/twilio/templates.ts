@@ -9,6 +9,7 @@ export type TwilioTemplate = {
   sid: string;
   name: string; // friendly_name from Twilio
   status: string; // approved | pending | rejected | unknown
+  body: string | null; // message body from types.twilio/text.body
 };
 
 async function fetchFromTwilio(): Promise<TwilioTemplate[]> {
@@ -40,7 +41,8 @@ async function fetchFromTwilio(): Promise<TwilioTemplate[]> {
         if (!approvalRes.ok) return null;
         const approval = await approvalRes.json();
         const status: string = approval.whatsapp?.status ?? 'unknown';
-        return { sid: c.sid as string, name: c.friendly_name as string, status };
+        const body: string | null = c.types?.['twilio/text']?.body ?? c.types?.['twilio/media']?.body ?? null;
+        return { sid: c.sid as string, name: c.friendly_name as string, status, body };
       } catch {
         return null;
       }

@@ -47,16 +47,22 @@ export default async function TemplatesPage() {
           <thead>
             <tr className="bg-gray-50 border-b">
               <th className="p-4 font-semibold text-gray-700">Template Name</th>
+              <th className="p-4 font-semibold text-gray-700">Message Body</th>
               <th className="p-4 font-semibold text-gray-700">Content SID</th>
               <th className="p-4 font-semibold text-gray-700">Status</th>
             </tr>
           </thead>
           <tbody>
             {templates.map((t) => (
-              <tr key={t.sid} className="border-b last:border-0 hover:bg-gray-50/50">
-                <td className="p-4 font-medium text-gray-900">{t.name}</td>
-                <td className="p-4 font-mono text-sm text-gray-500">{t.sid}</td>
-                <td className="p-4">
+              <tr key={t.sid} className="border-b last:border-0 hover:bg-gray-50/50 align-top">
+                <td className="p-4 font-medium text-gray-900 whitespace-nowrap">{t.name}</td>
+                <td className="p-4 text-sm text-gray-600 max-w-md">
+                  {t.body
+                    ? <span className="italic">&ldquo;{t.body}&rdquo;</span>
+                    : <span className="text-gray-400">—</span>}
+                </td>
+                <td className="p-4 font-mono text-sm text-gray-500 whitespace-nowrap">{t.sid}</td>
+                <td className="p-4 whitespace-nowrap">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[t.status] ?? 'bg-gray-100 text-gray-600'}`}>
                     {t.status}
                   </span>
