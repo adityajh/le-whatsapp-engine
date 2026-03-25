@@ -43,26 +43,32 @@ export default async function TemplatesPage() {
       </div>
 
       <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse table-fixed">
+          <colgroup>
+            <col className="w-40" />
+            <col />
+            <col className="w-52" />
+            <col className="w-24" />
+          </colgroup>
           <thead>
             <tr className="bg-gray-50 border-b">
-              <th className="p-4 font-semibold text-gray-700 w-36">Template Name</th>
+              <th className="p-4 font-semibold text-gray-700">Template Name</th>
               <th className="p-4 font-semibold text-gray-700">Message Body</th>
-              <th className="p-4 font-semibold text-gray-700 w-48">Content SID</th>
-              <th className="p-4 font-semibold text-gray-700 w-24">Status</th>
+              <th className="p-4 font-semibold text-gray-700">Content SID</th>
+              <th className="p-4 font-semibold text-gray-700">Status</th>
             </tr>
           </thead>
           <tbody>
             {templates.map((t) => (
               <tr key={t.sid} className="border-b last:border-0 hover:bg-gray-50/50 align-top">
-                <td className="p-4 font-medium text-gray-900 whitespace-nowrap">{t.name}</td>
-                <td className="p-4 text-sm text-gray-600 max-w-md">
+                <td className="p-4 font-medium text-gray-900 break-words">{t.name}</td>
+                <td className="p-4 text-sm text-gray-600">
                   {t.body
                     ? <span className="italic">&ldquo;{t.body}&rdquo;</span>
                     : <span className="text-gray-400">—</span>}
                 </td>
-                <td className="p-4 font-mono text-sm text-gray-500 whitespace-nowrap">{t.sid}</td>
-                <td className="p-4 whitespace-nowrap">
+                <td className="p-4 font-mono text-xs text-gray-500 break-all">{t.sid}</td>
+                <td className="p-4">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[t.status] ?? 'bg-gray-100 text-gray-600'}`}>
                     {t.status}
                   </span>
