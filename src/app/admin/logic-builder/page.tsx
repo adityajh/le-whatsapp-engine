@@ -6,7 +6,7 @@ export const metadata = {
 
 export default function LogicBuilderPage() {
   return (
-    <main className="w-full h-screen bg-gray-50 flex flex-col m-0 p-0 overflow-hidden">
+    <main className="w-full h-[calc(100vh-49px)] bg-gray-50 flex flex-col m-0 p-0 overflow-hidden">
       <LogicBuilderCanvas />
     </main>
   );

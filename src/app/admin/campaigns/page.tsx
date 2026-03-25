@@ -16,9 +16,9 @@ export default async function CampaignsPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Campaign Manager</h1>
-        <Link 
-          href="/admin/campaigns/create" 
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Campaign Manager</h1>
+        <Link
+          href="/admin/campaigns/create"
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
         >
           + New Campaign

@@ -20,10 +20,10 @@ export default async function SLAMonitorPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">SLA Monitor Dashboard</h1>
-        <Link 
-          href="/admin/campaigns" 
-          className="text-blue-600 hover:underline"
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">SLA Monitor Dashboard</h1>
+        <Link
+          href="/admin/campaigns"
+          className="text-sm text-blue-600 hover:underline"
         >
           View Campaigns &rarr;
         </Link>
