@@ -1,11 +1,12 @@
 // src/app/api/cron/process-queue/route.ts
 import { NextResponse } from 'next/server';
-import { dequeueInbound, dequeueStatus } from '@/lib/queue/client';
+import { dequeueInbound, dequeueOutbound, dequeueStatus } from '@/lib/queue/client';
 import { processInboundMessage } from '@/lib/workers/inboundProcessor';
 import { processStatusUpdate } from '@/lib/workers/statusProcessor';
+import { dispatchMessage } from '@/lib/engine/dispatcher';
 
 // cron-job.org calls this every minute.
-// Pulls jobs from Upstash Redis and processes them synchronously.
+// Drains all three queue types: inbound, outbound, status.
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -13,11 +14,11 @@ export async function GET(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  console.log('[Cron] Starting queue drain...');
+  console.log('[Cron] Queue drain starting...');
   const results: string[] = [];
 
   try {
-    // Process inbound messages (up to 10)
+    // 1. Process inbound messages (classify replies, update Supabase)
     const inboundJobs = await dequeueInbound(10);
     for (const data of inboundJobs) {
       try {
@@ -29,7 +30,25 @@ export async function GET(request: Request) {
       }
     }
 
-    // Process status updates (up to 10)
+    // 2. Dispatch outbound messages via Twilio
+    const outboundJobs = await dequeueOutbound(10);
+    for (const data of outboundJobs) {
+      try {
+        const msg = await dispatchMessage({
+          to:         data.to,
+          from:       data.from,
+          contentSid: data.contentSid,
+        });
+        if (msg) {
+          results.push(`outbound:${data.to}:${msg.sid}`);
+          console.log(`[Cron] Sent ${data.contentSid} to ${data.to} — SID: ${msg.sid}`);
+        }
+      } catch (e) {
+        console.error(`[Cron] Outbound dispatch error for ${data.to}`, e);
+      }
+    }
+
+    // 3. Process status updates (delivery/read/failed callbacks)
     const statusJobs = await dequeueStatus(10);
     for (const data of statusJobs) {
       try {

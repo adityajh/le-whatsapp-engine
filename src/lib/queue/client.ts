@@ -87,3 +87,20 @@ export async function dequeueStatus(count = 10): Promise<Record<string, string>[
   }
   return results;
 }
+
+/**
+ * Dequeue up to `count` outbound messages ready to be dispatched via Twilio.
+ */
+export async function dequeueOutbound(count = 10): Promise<Record<string, string>[]> {
+  const results: Record<string, string>[] = [];
+  for (let i = 0; i < count; i++) {
+    const item = await redisClient.lpop(`${QUEUE_PREFIX}:outbound`) as string | null;
+    if (!item) break;
+    try {
+      results.push(typeof item === 'string' ? JSON.parse(item) : item);
+    } catch (e) {
+      console.error('[Queue] Failed to parse outbound item', e);
+    }
+  }
+  return results;
+}
