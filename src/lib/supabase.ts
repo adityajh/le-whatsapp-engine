@@ -11,10 +11,19 @@ export type Lead = {
   lead_source: string | null;
   campaign_name: string | null;
   owner_email: string | null;
+  // Form fields synced from Zoho at intake
+  program: string | null;          // 'BBA Pune' | 'Storysells' | etc.
+  persona: string | null;          // 'Student' | 'Parent'
+  academic_level: string | null;   // '12th' | '11th' | '10th' | 'Graduate' | 'Already in college'
+  relocate_to_pune: string | null; // 'Yes' | 'No'
+  // Computed / written by rules engine
+  urgency: string | null;          // 'HIGH' | 'MEDIUM' | 'LOW'
+  lead_track: string | null;       // 'enterprise_leadership' | 'family_business' | 'venture_builder'
+  webinar_rsvp: boolean | null;    // true | false | null (null = not yet asked)
   wa_opt_in: boolean;
   wa_state: string;
   wa_hotness: string | null;
-  wa_last_outbound_at: string | null; // ISO string 
+  wa_last_outbound_at: string | null; // ISO string
   wa_last_inbound_at: string | null;
   wa_last_template: string | null;
   wa_last_status: string | null;

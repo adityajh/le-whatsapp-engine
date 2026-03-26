@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+export async function GET() {
+  const { data, error } = await supabase
+    .from('workflow_rules')
+    .select('conditions_json, actions_json')
+    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .single();
+
+  if (error || !data) {
+    return NextResponse.json({ nodes: null, edges: null }, { status: 200 });
+  }
+
+  return NextResponse.json({ nodes: data.conditions_json, edges: data.actions_json }, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

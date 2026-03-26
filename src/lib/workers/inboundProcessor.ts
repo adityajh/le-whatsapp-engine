@@ -1,72 +1,193 @@
 import { supabase } from '@/lib/supabase';
 import { classifyReply } from '@/lib/engine/classifier';
+import { enqueueOutboundMessage } from '@/lib/queue/client';
+import { getTwilioTemplateSid } from '@/lib/twilio/templates';
+
+const PRIMARY_SENDER = '+917709333161';
+
+// ─── Button postback → classification mapping ────────────────────────────────
+// wa_followup_2_quickreply buttons
+const BUTTON_MAP: Record<string, { replyClass: string; hotness: string; waState: string }> = {
+  INTERESTED:      { replyClass: 'interested', hotness: 'hot',  waState: 'wa_hot'     },
+  MORE_INFO:       { replyClass: 'other',      hotness: 'warm', waState: 'wa_hot'     },
+  DECIDED_AGAINST: { replyClass: 'not_now',    hotness: 'cold', waState: 'wa_closed'  },
+  // wa_track_selector buttons
+  ENTERPRISE_LEADERSHIP: { replyClass: 'interested', hotness: 'hot', waState: 'wa_hot' },
+  FAMILY_BUSINESS:       { replyClass: 'interested', hotness: 'hot', waState: 'wa_hot' },
+  VENTURE_BUILDER:       { replyClass: 'interested', hotness: 'hot', waState: 'wa_hot' },
+  // wa_webinar_cta buttons
+  WEBINAR_YES: { replyClass: 'interested', hotness: 'warm', waState: 'wa_hot'    },
+  WEBINAR_NO:  { replyClass: 'not_now',    hotness: 'cold', waState: 'wa_nurture' },
+};
+
+// Track-selector buttons that also write lead_track
+const TRACK_BUTTONS: Record<string, string> = {
+  ENTERPRISE_LEADERSHIP: 'enterprise_leadership',
+  FAMILY_BUSINESS:       'family_business',
+  VENTURE_BUILDER:       'venture_builder',
+};
 
 export async function processInboundMessage(job: { data: Record<string, string> }) {
-  const { MessageSid, From, Body } = job.data;
+  const { MessageSid, From, Body, ButtonPayload } = job.data;
 
-  // Normalize Phone safely (strip whatsapp: and ensure +91)
+  // Normalise phone
   const phone = (From || '').replace('whatsapp:', '');
   const cleanPhone = phone.startsWith('+91') ? phone : (phone.length === 10 ? `+91${phone}` : phone);
 
-  // Classify intent using DB-driven rules
-  const { replyClass, hotness: waHotness, optOut } = await classifyReply(Body || '');
-  const waOptIn = !optOut;
-
   const now = new Date().toISOString();
 
-  // Owner Assignment Logic
-  let assignedOwner = null;
-  const { data: currentLead } = await supabase.from('leads').select('owner_email').eq('phone_normalised', cleanPhone).single();
-  
-  if (currentLead && !currentLead.owner_email && (replyClass === 'interested' || replyClass === 'fee_question')) {
-    // Basic assignment logic - placeholder for round-robin
-    assignedOwner = 'team@letsenterprise.in';
-    console.log(`[Owner Assignment] Lead ${cleanPhone} responded favorably. Automatically assigning to ${assignedOwner}`);
+  // ── STEP A: Button postback detection (takes priority over NLP) ─────────────
+  let replyClass: string;
+  let hotness: string;
+  let waState: string;
+  let leadTrackUpdate: string | null = null;
+  let webinarRsvpUpdate: boolean | null = null;
+
+  if (ButtonPayload && BUTTON_MAP[ButtonPayload]) {
+    const mapped = BUTTON_MAP[ButtonPayload];
+    replyClass = mapped.replyClass;
+    hotness    = mapped.hotness;
+    waState    = mapped.waState;
+
+    if (TRACK_BUTTONS[ButtonPayload]) {
+      leadTrackUpdate = TRACK_BUTTONS[ButtonPayload];
+    }
+    if (ButtonPayload === 'WEBINAR_YES') webinarRsvpUpdate = true;
+    if (ButtonPayload === 'WEBINAR_NO')  webinarRsvpUpdate = false;
+
+    console.log(`[InboundProcessor] Button tap: ${ButtonPayload} → class=${replyClass}, state=${waState}`);
+  } else {
+    // ── STEP B: NLP classifier for free-text replies ─────────────────────────
+    const classified = await classifyReply(Body || '');
+    replyClass = classified.replyClass;
+    hotness    = classified.hotness;
+
+    if (classified.optOut) {
+      waState = 'wa_closed';
+    } else if (replyClass === 'interested' || replyClass === 'fee_question') {
+      waState = 'wa_hot';
+    } else if (replyClass === 'not_now') {
+      waState = 'wa_nurture';
+    } else if (replyClass === 'wrong_number' || replyClass === 'stop') {
+      waState = 'wa_closed';
+    } else {
+      waState = 'replied'; // 'other' — human review, but still counts as a reply
+    }
   }
 
-  // Update Supabase leads
+  const waOptIn = replyClass !== 'stop';
+
+  // ── Fetch current lead ────────────────────────────────────────────────────
+  const { data: currentLead } = await supabase
+    .from('leads')
+    .select('id, zoho_lead_id, owner_email, lead_track, name')
+    .eq('phone_normalised', cleanPhone)
+    .single();
+
+  // ── Owner Assignment ───────────────────────────────────────────────────────
+  let assignedOwner = null;
+  if (currentLead && !currentLead.owner_email && (replyClass === 'interested' || replyClass === 'fee_question')) {
+    assignedOwner = 'team@letsenterprise.in';
+    console.log(`[Owner Assignment] Lead ${cleanPhone} replied favorably — assigning to ${assignedOwner}`);
+  }
+
+  // ── Build Supabase update ─────────────────────────────────────────────────
+  const leadUpdate: Record<string, any> = {
+    wa_reply_class:    replyClass,
+    wa_hotness:        hotness,
+    wa_last_inbound_at: now,
+    wa_opt_in:         waOptIn,
+    wa_state:          waState,
+    ...(assignedOwner  ? { owner_email: assignedOwner } : {}),
+    ...(leadTrackUpdate !== null ? { lead_track: leadTrackUpdate } : {}),
+    ...(webinarRsvpUpdate !== null ? { webinar_rsvp: webinarRsvpUpdate } : {}),
+  };
+
+  // ── STEP C: SLA alert for hot leads ──────────────────────────────────────
+  if (replyClass === 'interested' || replyClass === 'fee_question') {
+    const slaDeadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // +2h
+    leadUpdate.wa_human_response_due_at = slaDeadline;
+  }
+
   const { data: lead, error: leadError } = await supabase
     .from('leads')
-    .update({
-      wa_reply_class: replyClass,
-      wa_hotness: waHotness,
-      wa_last_inbound_at: now,
-      wa_opt_in: waOptIn,
-      ...(assignedOwner ? { owner_email: assignedOwner } : {})
-    })
+    .update(leadUpdate)
     .eq('phone_normalised', cleanPhone)
-    .select('zoho_lead_id, owner_email')
+    .select('zoho_lead_id, owner_email, lead_track, name')
     .single();
 
   if (leadError && leadError.code !== 'PGRST116') {
     console.error(`[InboundProcessor] Error updating lead ${cleanPhone}:`, leadError);
-    // Let BullMQ retry
     throw new Error('Database error on leads update');
   }
 
-  // Update messages table (idempotent if MessageSid unique constraint exists)
+  // ── Save inbound message (idempotent) ─────────────────────────────────────
   const { error: msgError } = await supabase.from('messages').insert({
-    twilio_sid: MessageSid,
+    twilio_sid:       MessageSid,
     phone_normalised: cleanPhone,
-    direction: 'inbound',
-    body: Body,
-    status: 'received',
-    created_at: now,
+    direction:        'inbound',
+    body:             Body,
+    status:           'received',
+    created_at:       now,
   });
 
-  if (msgError && msgError.code !== '23505') { // Ignore unique constraint violation for idempotency
+  if (msgError && msgError.code !== '23505') {
     console.error(`[InboundProcessor] Error saving message ${MessageSid}:`, msgError);
   }
 
-  // Zoho Writeback Stub
+  // ── Log to lead_events ────────────────────────────────────────────────────
+  const eventType = ButtonPayload ? 'button_tap' : 'free_text_reply';
+  await supabase.from('lead_events').insert({
+    phone_normalised: cleanPhone,
+    event_type:       eventType,
+    payload:          ButtonPayload
+      ? { buttonPayload: ButtonPayload, classification: replyClass }
+      : { body: Body, classification: replyClass },
+    created_at: now,
+  }).then(({ error }) => {
+    if (error) console.warn(`[InboundProcessor] lead_events insert failed:`, error.message);
+  });
+
+  // ── Post-classification actions ───────────────────────────────────────────
+
+  // Send wa_counsellor_intro for interested / fee_question / track-selector taps
+  const sendCounsellor =
+    replyClass === 'interested' ||
+    replyClass === 'fee_question' ||
+    !!TRACK_BUTTONS[ButtonPayload ?? ''];
+
+  if (sendCounsellor) {
+    const track = leadTrackUpdate ?? currentLead?.lead_track ?? null;
+    const trackLabel = track
+      ? track.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : null;
+
+    const contentSid = await getTwilioTemplateSid('wa_counsellor_intro');
+    if (contentSid) {
+      const name = lead?.name ?? currentLead?.name ?? 'there';
+      await enqueueOutboundMessage({
+        to:               cleanPhone,
+        from:             PRIMARY_SENDER,
+        contentSid,
+        templateName:     'wa_counsellor_intro',
+        contentVariables: JSON.stringify({ "1": name }),
+      });
+      console.log(`[InboundProcessor] Queued wa_counsellor_intro → ${cleanPhone}${trackLabel ? ` (track: ${trackLabel})` : ''}`);
+    } else {
+      console.warn(`[InboundProcessor] wa_counsellor_intro SID not found — skipping counsellor send.`);
+    }
+  }
+
+  // Webinar YES — flag for manual counsellor action (no auto-template)
+  if (ButtonPayload === 'WEBINAR_YES') {
+    console.log(`[InboundProcessor] WEBINAR_YES from ${cleanPhone} — counsellor must send joining details manually.`);
+  }
+
+  // Zoho writeback stub
   if (lead?.zoho_lead_id) {
-    console.log(`[Zoho Writeback] Syncing ${lead.zoho_lead_id} with reply_class=${replyClass}, hotness=${waHotness}`);
-    
-    // Alert logic: If hot, trigger email & task
-    if (waHotness === 'hot') {
-      console.log(`[Alert Engine] Triggering Hot Lead Alert -> Zoho Task & Email for ${lead.zoho_lead_id}`);
-      // TODO: Actual API calls to email provider / Zoho Task creation here.
-      // e.g. await sendAlertEmail(lead.zoho_lead_id, replyClass);
+    console.log(`[Zoho Writeback] Syncing ${lead.zoho_lead_id}: class=${replyClass}, hotness=${hotness}`);
+    if (hotness === 'hot') {
+      console.log(`[Alert Engine] Hot Lead → Zoho Task & Email for ${lead.zoho_lead_id}`);
     }
   }
 

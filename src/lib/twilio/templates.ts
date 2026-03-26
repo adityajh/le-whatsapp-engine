@@ -41,7 +41,12 @@ async function fetchFromTwilio(): Promise<TwilioTemplate[]> {
         if (!approvalRes.ok) return null;
         const approval = await approvalRes.json();
         const status: string = approval.whatsapp?.status ?? 'unknown';
-        const body: string | null = c.types?.['twilio/text']?.body ?? c.types?.['twilio/media']?.body ?? null;
+        const body: string | null =
+          c.types?.['twilio/text']?.body ??
+          c.types?.['twilio/quick-reply']?.body ??
+          c.types?.['twilio/call-to-action']?.body ??
+          c.types?.['twilio/media']?.body ??
+          null;
         return { sid: c.sid as string, name: c.friendly_name as string, status, body };
       } catch {
         return null;

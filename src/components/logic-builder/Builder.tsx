@@ -18,7 +18,7 @@ import 'reactflow/dist/style.css';
 import { X, Save, Plus } from 'lucide-react';
 
 import { TriggerNode, ConditionNode, ActionNode, EndNode } from './Nodes';
-import { WORKFLOW_STATES, LEAD_FIELDS, SOURCE_VALUES } from '@/lib/constants';
+import { WORKFLOW_STATES, LEAD_FIELDS, FIELD_VALUES } from '@/lib/constants';
 
 const nodeTypes = {
   triggerNode: TriggerNode,
@@ -68,6 +68,18 @@ export default function LogicBuilderCanvas() {
   const [twilioTemplates, setTwilioTemplates] = useState<{ sid: string; name: string }[]>([]);
 
   useEffect(() => {
+    // Load saved workflow from DB (replaces the hardcoded initial graph)
+    fetch('/api/admin/workflow')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+        }
+      })
+      .catch((err) => console.error('[LogicBuilder] Failed to load workflow:', err));
+
+    // Load approved templates for the action node dropdown
     fetch('/api/admin/templates')
       .then((r) => r.json())
       .then((data) => Array.isArray(data) && setTwilioTemplates(data))
@@ -138,7 +150,7 @@ export default function LogicBuilderCanvas() {
     if (type === 'triggerNode') newNode.data.state = WORKFLOW_STATES[0];
     if (type === 'conditionNode') {
       newNode.data.field = LEAD_FIELDS[0].id;
-      newNode.data.value = SOURCE_VALUES[0];
+      newNode.data.value = FIELD_VALUES[LEAD_FIELDS[0].id]?.[0] ?? '';
     }
     if (type === 'actionNode') newNode.data.templateName = twilioTemplates[0]?.name ?? '';
 
@@ -265,18 +277,18 @@ export default function LogicBuilderCanvas() {
                   </div>
                   <div>
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Compare Value</label>
-                    {selectedNode.data.field === 'lead_source' ? (
-                      <select 
+                    {FIELD_VALUES[selectedNode.data.field] ? (
+                      <select
                         value={selectedNode.data.value || ''}
                         onChange={(e) => updateNodeData(selectedNode.id, { value: e.target.value })}
                         className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none shadow-inner bg-gray-50"
                       >
-                        {SOURCE_VALUES.map(v => (
+                        {FIELD_VALUES[selectedNode.data.field].map((v: string) => (
                           <option key={v} value={v}>{v}</option>
                         ))}
                       </select>
                     ) : (
-                      <input 
+                      <input
                         type="text"
                         value={selectedNode.data.value || ''}
                         onChange={(e) => updateNodeData(selectedNode.id, { value: e.target.value })}

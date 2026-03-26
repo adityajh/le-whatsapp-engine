@@ -3,6 +3,101 @@
 All notable changes to the Let's Enterprise WhatsApp Engine project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+---
+
+## [3.0.0] - 2026-03-26 (Rules Engine v3 — Full Template Suite + Button Payloads)
+
+### Added
+
+#### Template Suite (all 10 templates registered)
+- **`wa_welcome_meta_student`** (`HXd032c7b2d23d59cd56bbc71453b0afd6`) — Meta Ads, Student persona
+- **`wa_welcome_meta_parent`** (`HXd97f088d39cd2f46bf189a3839eeb8ce`) — Meta Ads, Parent persona
+- **`wa_welcome_organic_student`** (`HX5f55c702e5b379893cf79f9a0f492e6e`) — Website/Organic, Student persona
+- **`wa_welcome_organic_parent`** (`HXdad3576db7480fcf3e61c780221df990`) — Website/Organic, Parent persona
+- **`wa_welcome_manual`** — Manual/Phone/Instagram/Referral (SID pending approval)
+- **`wa_followup_1`** — 24h no-reply follow-up, hard stop (SID pending approval)
+- **`wa_followup_2_quickreply`** (`HX99c54dea1ea1d4fec682ee78452c0831`) — Post-reply 48h silence, 3-button quick reply
+- **`wa_track_selector`** (`HXddf8ea9d9d01a0cc51dc6419909abb20`) — Track selection: Enterprise Leadership / Family Business / Venture Builder
+- **`wa_webinar_cta`** (`HXe5d3fdede430efb27b5e7c50bed1b55a`) — Parent webinar RSVP, campaign-only
+- **`wa_counsellor_intro`** — Sent on interested/fee_question/track-selector tap (SID pending approval)
+- All 10 templates registered in `src/lib/constants.ts` with `TEMPLATE_SIDS` map
+
+#### Rules Engine v3 — Programmatic Rules 1–4
+- **Rule 1 (Program filter):** Storysells leads routed to `wa_welcome_manual` (placeholder) instead of silent skip. All other programs continue.
+- **Rule 2 (Relocation filter):** `relocate_to_pune = 'No'` → `wa_manual_triage` state, no WA message sent.
+- **Rule 3 (Urgency):** `academic_level` mapped to urgency (`HIGH`/`MEDIUM`/`LOW`) at Zoho webhook intake. `LOW` (10th grade or below) → skip WA sequence entirely.
+- **Rule 4 (Source × Persona routing):** Welcome template selected by cross-referencing `lead_source` × `persona`. Five distinct paths: Meta×Student, Meta×Parent, Organic×Student, Organic×Parent, Manual/everything else.
+- `rulesEngine.ts` — evaluates Logic Builder graph first; falls back to programmatic Rules 1–4 if no graph is published or graph returns `no_match`.
+- New `wa_state = 'first_sent'` set after enqueue (enables Rule 5 cron targeting).
+
+#### Workflow Graph Seeded into Logic Builder
+- `supabase/migrations/20260326_seed_workflow.sql` — inserts the complete Rules 1–4 decision tree as a React Flow graph into `workflow_rules` (static ID `00000000-0000-0000-0000-000000000001`).
+- Graph is immediately editable via `/admin/logic-builder` — no redeploy needed to change routing logic.
+- Graph nodes: Trigger(wa_pending) → Condition(program) → Condition(relocate_to_pune) → Condition(academic_level) → Condition(lead_source) → Condition(persona) → Action(template).
+
+#### Logic Builder Enhancements
+- **`GET /api/admin/workflow`** — new endpoint to load the saved graph from DB. Builder now loads the published graph on mount instead of always showing hardcoded initial nodes.
+- **Per-field value dropdowns** — condition node editor now shows a typed dropdown (not free text) for every field with a fixed value set: `lead_source`, `persona`, `program`, `academic_level`, `relocate_to_pune`, `urgency`, `lead_track`, `wa_hotness`, `wa_reply_class`, `wa_state`.
+- `FIELD_VALUES` map added to `constants.ts` — single source of truth for dropdown options across Builder and any future admin UI.
+
+#### New Lead Fields (DB + Types)
+- `supabase/migrations/20260326_new_lead_fields.sql` — adds 7 columns to `leads` table:
+  - `program TEXT` — product line from Zoho form (BBA Pune, Storysells, etc.)
+  - `persona TEXT` — Student or Parent
+  - `academic_level TEXT` — 12th / 11th / 10th / Graduate / Already in college
+  - `relocate_to_pune TEXT` — Yes / No
+  - `urgency TEXT` — HIGH / MEDIUM / LOW (computed at intake from `academic_level`)
+  - `lead_track TEXT` — enterprise_leadership / family_business / venture_builder (set by track selector button)
+  - `webinar_rsvp BOOLEAN` — true / false / NULL (set by webinar CTA button)
+- `Lead` type in `src/lib/supabase.ts` updated to include all new fields.
+
+#### Zoho Webhook Enrichment
+- `zoho/route.ts` now accepts `program`, `persona`, `academic_level`, `relocate_to_pune` from Zoho payload (all optional, null-safe).
+- `computeUrgency()` helper: derives `HIGH`/`MEDIUM`/`LOW` from `academic_level` at intake time and writes to `leads.urgency`.
+- Zoho webhook schema (`zohoPayloadSchema`) extended with new optional fields.
+
+#### ButtonPayload Handling — Rule 8
+- `inboundProcessor.ts` now detects `ButtonPayload` from Twilio quick reply taps **before** the NLP classifier runs.
+- Full button map: `INTERESTED`, `MORE_INFO`, `DECIDED_AGAINST` (wa_followup_2 buttons), `ENTERPRISE_LEADERSHIP`, `FAMILY_BUSINESS`, `VENTURE_BUILDER` (track selector), `WEBINAR_YES`, `WEBINAR_NO` (webinar CTA).
+- Track selector taps write `lead_track` to Supabase.
+- Webinar taps write `webinar_rsvp` (true/false) to Supabase.
+- `WEBINAR_YES` logs a counsellor flag (no auto-template — counsellor sends joining details manually).
+
+#### Post-Classification Actions (Rule 8, Step C)
+- `interested` or `fee_question` → auto-enqueues `wa_counsellor_intro` + sets `wa_human_response_due_at = now() + 2h`.
+- Track selector taps (all 3 tracks) → also trigger `wa_counsellor_intro`.
+- State transitions written to DB: `wa_hot`, `wa_nurture`, `wa_closed`, `replied` (for free-text `other` replies).
+- `wa_opt_in = false` written immediately on `stop` classification (compliance — cannot wait for reconcile cron).
+- Owner auto-assignment on `interested`/`fee_question` if no owner is set.
+- All events logged to `lead_events` table with `event_type = 'button_tap'` or `'free_text_reply'`.
+
+#### Follow-up Cron — Rules 5 & 6
+- `/api/cron/reengagement` repurposed (was: 7-day dormancy cron with deprecated `wa_reengagement` template).
+- **Rule 5** — 24h no-reply: targets `wa_state = 'first_sent'` + `wa_last_outbound_at < now()-24h` + `wa_last_inbound_at IS NULL` → sends `wa_followup_1`, sets state `followup_sent`.
+- **Rule 6a** — 48h post-reply, no track: targets `wa_state = 'replied'` + `wa_last_inbound_at < now()-48h` + `lead_track IS NULL` → sends `wa_track_selector`.
+- **Rule 6b** — 48h post-reply, track set: targets `wa_state = 'replied'` + `wa_last_inbound_at < now()-48h` + `lead_track IS NOT NULL` → sends `wa_followup_2_quickreply`.
+- All three rules respect `wa_opt_in = true` and `isWithinSendWindow()` guard.
+- Cron schedule unchanged: daily at 11:30 AM via cron-job.org (acceptable — max ~24h timing variance on follow-ups).
+
+#### Constants Overhaul
+- `WORKFLOW_STATES` updated: added `first_sent`, `followup_sent`, `replied`, `wa_hot`, `wa_nurture`, `wa_manual_triage`. Removed deprecated states.
+- `LEAD_FIELDS` expanded: added `persona`, `program`, `academic_level`, `relocate_to_pune`, `urgency`, `lead_track`.
+- `FIELD_VALUES` map introduced (replaces `SOURCE_VALUES`). `SOURCE_VALUES` kept as alias for backwards compatibility.
+
+### Changed
+- **`rulesEngine.ts`** — `wa_last_outbound_at !== null` guard added: welcome templates are never re-sent to leads already in sequence.
+- **`rulesEngine.ts`** — `close` action from graph now sets `wa_state = 'wa_manual_triage'` (was: silent no-op).
+- **`rulesEngine.ts`** — state after enqueueing changed from `wa_pending` to `first_sent`.
+- **`inboundProcessor.ts`** — `wa_state` now written on every inbound (was: not written at all). State machine: `interested`/`fee_question` → `wa_hot`; `not_now` → `wa_nurture`; `stop`/`wrong_number` → `wa_closed`; `other` → `replied`.
+- **Logic Builder** — condition node value field now driven by `FIELD_VALUES[field]` lookup. If no fixed values defined for a field, falls back to free text input.
+- **`/api/cron/reengagement`** — fully repurposed. Old 7-day dormancy logic (using deprecated `wa_reengagement` template) replaced with Rules 5 & 6.
+
+### Deprecated
+- `wa_reengagement` template (`HXb0be78e0070d3153d3c1d5d62410b74a`) — retired from automated nurture. Kept in `TEMPLATE_SIDS` for reference. Re-engagement is now handled by `wa_followup_2_quickreply` (Rule 6b, post-reply) and campaigns (for cold/no-reply leads).
+- `wa_welcome_meta`, `wa_welcome_organic`, `wa_welcome_meta_2` — superseded by the source×persona split templates. Kept in `TEMPLATE_SIDS` as legacy fallbacks.
+
+---
+
 ## [2.5.1] - 2026-03-25 (Templates Page Polish)
 ### Fixed
 - Narrowed Template Name and Content SID columns, widened Message Body column in `/admin/templates` table.
@@ -34,80 +129,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2.3.0] - 2026-03-25 (Outbound Delivery Confirmed)
 ### Added
-- **`wa_welcome_meta_2` Template**: Resubmitted `wa_welcome_meta` as a utility category template. Approved SID: `HXf346638884dd3f8121e9e620319c289c`. Template: *"Hey {{1}}, saw you checked out the Working BBA..."*
+- **`wa_welcome_meta_2` Template**: Resubmitted `wa_welcome_meta` as a utility category template. Approved SID: `HXf346638884dd3f8121e9e620319c289c`.
 - Added `wa_welcome_meta_2` to `TEMPLATE_SIDS` in `constants.ts`.
 - Updated Meta Ads fallback routing in `rulesEngine.ts` to use `wa_welcome_meta_2`.
-- **Message body in templates page**: `/admin/templates` now shows full template body text per row, extracted from `types.twilio/text.body` in the Content API response. No extra API calls needed.
+- **Message body in templates page**: `/admin/templates` now shows full template body text per row, extracted from `types.twilio/text.body` in the Content API response.
 
 ### Fixed
-- **Twilio 63027 — Resolved**: End-to-end delivery confirmed. Root cause was template category (marketing vs utility). Utility templates bypass stricter Content API restrictions.
+- **Twilio 63027 — Resolved**: End-to-end delivery confirmed. Root cause was template category (marketing vs utility).
 
 ---
 
 ## [2.2.0] - 2026-03-25 (Outbound Dispatch Debugging & Documentation)
 ### Added
-- **Messaging Service SID Support**: Dispatcher now requires `TWILIO_MESSAGING_SERVICE_SID` (MG...) env var. Twilio Content API templates (HX...) require a Messaging Service SID — sending with a `from` phone number alone causes error 63027.
-- **Centralized Constants** (`src/lib/constants.ts`): Single source of truth for all template SIDs, workflow states, and lead fields. Both the Logic Builder UI and the Rules Engine import from this file.
-- **Logic Builder Dropdowns**: Replaced free-form text inputs in the node properties panel with dynamic dropdowns for States, Lead Fields, and Templates. Dropdowns auto-populate from `constants.ts`.
-- **Verbose Dispatcher Logging**: Dispatcher now logs the full Twilio payload and structured error (`code`, `status`, `moreInfo`) on failure, making production debugging much faster.
-- **`TWILIO_MESSAGING_SERVICE_SID` Env Var**: Added to `config.ts` schema. Value: `MG4b7040930f5d63bc27d808429106136a`.
+- **Messaging Service SID Support**: Dispatcher now requires `TWILIO_MESSAGING_SERVICE_SID` (MG...) env var.
+- **Centralized Constants** (`src/lib/constants.ts`): Single source of truth for all template SIDs, workflow states, and lead fields.
+- **Logic Builder Dropdowns**: Replaced free-form text inputs in the node properties panel with dynamic dropdowns.
+- **Verbose Dispatcher Logging**: Dispatcher now logs the full Twilio payload and structured error on failure.
+- **`TWILIO_MESSAGING_SERVICE_SID` Env Var**: Added to `config.ts` schema.
 
 ### Fixed
-- **Twilio Error 63027 (Root Cause)**: Content API templates (`HX...` SIDs) _must_ be sent with a `messagingServiceSid`. Previous code sent with only a `from` phone number, which is invalid since April 2025.
-- **Zoho Reconcile Cron 405**: Added `POST` handler to `/api/cron/zoho-reconcile`. `cron-job.org` sends POST requests; the GET-only route was throwing 405 errors.
-- **`contentVariables` Format**: Stopped passing `contentVariables: {}` (empty object) for templates with no variables. Empty object triggers 63027; the fix is to omit the field entirely.
-- **Cron Stripping Variables**: `process-queue` cron was not passing `contentVariables` from queue payloads to the dispatcher. Fixed to spread the full payload.
-- **Lead Name Variable**: Rules engine now passes `{ "1": lead.name || "there" }` as content variables so templates with `{{1}}` placeholders resolve correctly.
+- **Twilio Error 63027 (Root Cause)**: Content API templates must be sent with `messagingServiceSid`.
+- **Zoho Reconcile Cron 405**: Added `POST` handler to `/api/cron/zoho-reconcile`.
+- **`contentVariables` Format**: Stopped passing `contentVariables: {}` for templates with no variables.
+- **Cron Stripping Variables**: `process-queue` cron was not passing `contentVariables` from queue payloads to the dispatcher.
+- **Lead Name Variable**: Rules engine now passes `{ "1": lead.name || "there" }` as content variables.
 
 ### Changed
-- **Geo-Permissions**: User enabled India in Twilio Console → Geo Permissions to unblock delivery to `+91` numbers.
-- **Dispatcher Architecture**: `from` phone number is now a fallback only; `messagingServiceSid` takes priority when available.
+- **Geo-Permissions**: User enabled India in Twilio Console → Geo Permissions.
+- **Dispatcher Architecture**: `from` phone number is now a fallback only; `messagingServiceSid` takes priority.
+
+---
 
 ## [2.1.0] - 2026-03-25 (Week 3 + Production Deployment)
 ### Added
-- **SLA Monitor Dashboard**: Built `/admin/sla-monitor` — a real-time table showing all leads ticking toward or past their human response SLA deadline. Breached leads highlighted in red.
-- **Re-engagement Cron**: Created `/api/cron/reengagement` — daily sweep of leads dormant >7 days. Filters out opted-out/closed/dead leads, enqueues `wa_reengagement` template (SID: `HXb0be78e0070d3153d3c1d5d62410b74a`).
-- **Source-Based Routing via Rules Engine**: Updated Zoho webhook to upsert leads into Supabase and route them through `evaluateLeadAction()`. The Logic Builder's condition nodes (e.g., `Source == Meta Ads`) now drive template selection natively.
-- **Owner Assignment**: Inbound processor now auto-assigns `owner_email` when an unassigned lead replies as `interested` or `fee_question`.
-- **Centralized Admin Dashboard**: Created `/admin` as the unified control hub with card-based navigation to Logic Builder, SLA Monitor, and Campaign Manager.
+- **SLA Monitor Dashboard**: Built `/admin/sla-monitor`.
+- **Re-engagement Cron**: Created `/api/cron/reengagement` — daily sweep of leads dormant >7 days.
+- **Source-Based Routing via Rules Engine**: Zoho webhook routes leads through `evaluateLeadAction()`.
+- **Owner Assignment**: Inbound processor auto-assigns `owner_email` on favorable reply.
+- **Centralized Admin Dashboard**: Created `/admin` as the unified control hub.
 - **Root Redirect**: Visiting `/` now auto-redirects to `/admin`.
 
 ### Fixed
-- **Queue Architecture Rewrite**: Replaced BullMQ (raw TCP) with pure Upstash REST (`rpush`/`lpop`). BullMQ was silently failing in serverless because Upstash only supports HTTP/REST — no raw Redis TCP. This was the root cause of messages never being dequeued.
-- **Cron Processor Timeout**: Removed 50-second `setTimeout` block in the process-queue cron that caused cron-job.org to timeout. Now returns immediately after processing.
-- **Zod Schema Null Handling**: Made all optional fields in the Zoho webhook schema `.nullable()` to support real-world Zoho payloads.
-- **Vercel Build Config**: Added `eslint.ignoreDuringBuilds` and `typescript.ignoreBuildErrors` to `next.config.ts` to unblock deployments blocked by pre-existing type warnings.
-- **Vercel Cron Schedule**: Downgraded cron frequencies from per-minute to daily to comply with Vercel Hobby plan limits. Per-minute processing now handled by cron-job.org.
+- **Queue Architecture Rewrite**: Replaced BullMQ with pure Upstash REST (`rpush`/`lpop`).
+- **Cron Processor Timeout**: Removed 50-second `setTimeout` block.
+- **Zod Schema Null Handling**: Made all optional fields `.nullable()`.
+- **Vercel Build Config**: Added `eslint.ignoreDuringBuilds` and `typescript.ignoreBuildErrors`.
 
 ### Changed
-- **Vercel Deployment**: Switched from GitHub auto-deploy (broken webhook) to `vercel --prod --yes` CLI deploys.
-- **cron-job.org Integration**: Set up 4 external cron jobs for per-minute queue processing, SLA monitoring, Zoho reconciliation, and daily re-engagement.
+- **Vercel Deployment**: Switched from GitHub auto-deploy to `vercel --prod --yes` CLI.
+- **cron-job.org Integration**: Set up 4 external cron jobs.
+
+---
 
 ## [2.0.0] - 2026-03-24 (Week 2: Stability + Campaigns)
 ### Added
-- **Inbound Reply Processor** (`inboundProcessor.ts`): Classifies WhatsApp replies against 6-class taxonomy (`interested`, `fee_question`, `not_now`, `wrong_number`, `stop`, `other`). Updates `wa_reply_class`, `wa_hotness`, `wa_last_inbound_at` in Supabase.
-- **Status Processor** (`statusProcessor.ts`): Handles Twilio delivery callbacks. Tracks `delivered`, `read`, `failed` statuses. Processes error codes `63032` (opt-out), `21211`/`63016` (invalid number).
-- **Campaign Manager Module** (`manager.ts`): Segments leads by filters (excluding opt-outs/closed), batch-enqueues into outbound queue with rate limiting (30 msg/min) and time-of-day restrictions (9 AM – 8 PM IST).
-- **Campaign Database**: Created `campaigns` and `campaign_leads` tables (`20260324_campaign_tracking.sql`).
-- **Campaign UI**: Built `/admin/campaigns` (list view) and `/admin/campaigns/create` (form with Server Actions).
-- **SLA Monitor Cron** (`/api/cron/sla-monitor`): Checks for leads past `wa_human_response_due_at`, escalates.
-- **Zoho Reconciliation Cron** (`/api/cron/zoho-reconcile`): Catches leads with missing `WA_State`.
-- **Cooldown Enforcement**: Dispatcher blocks >2 outbound templates before an inbound reply.
-- **Hot Lead Alerts**: Inbound processor triggers alerts when leads classified as `interested`.
+- **Inbound Reply Processor** (`inboundProcessor.ts`): 6-class taxonomy classification.
+- **Status Processor** (`statusProcessor.ts`): Delivery callbacks, error code handling.
+- **Campaign Manager Module**: Segmentation, batch-enqueue, rate limiting.
+- **Campaign Database**: `campaigns` and `campaign_leads` tables.
+- **Campaign UI**: `/admin/campaigns` and `/admin/campaigns/create`.
+- **SLA Monitor Cron**, **Zoho Reconciliation Cron**, **Cooldown Enforcement**, **Hot Lead Alerts**.
+- **Visual Logic Builder UI**: React Flow canvas, workflow persistence, dynamic runtime evaluator.
 
-### Added (Week 2 Fast-Track)
-- **Visual Logic Builder UI**: Interactive React Flow canvas (`Builder.tsx`) with custom trigger, condition, and action nodes.
-- **Workflow State Persistence**: `/api/admin/workflow` endpoint persists visual logic schema to `workflow_rules` table.
-- **Dynamic Runtime Evaluator**: `logicEvaluator.ts` traverses React Flow graph against live lead attributes at runtime.
+---
 
 ## [1.0.0] - 2026-03-23 (Week 1: Core Plumbing)
 ### Added
 - **Infrastructure**: Vercel + Next.js App Router + Supabase Postgres + Upstash Redis.
 - **Database Schema**: `leads`, `messages`, `workflow_rules`, `sender_profiles`, `lead_events` tables.
-- **Zod Config Validator**: Centralized `config.ts` validating all environment variables at startup.
-- **Webhooks**: `/api/webhooks/zoho` (HMAC SHA256), `/api/webhooks/twilio/inbound` and `/status` (Twilio signature validation).
-- **Rules Engine v1**: `rulesEngine.ts` for stateless routing decisions and opt-out handling.
-- **Session Window**: `sessionWindow.ts` enforcing 9 AM – 8 PM IST send window and 24h Twilio session rules.
-- **Twilio Dispatcher**: `dispatcher.ts` for template sends via Twilio Content API.
-- **Phone Normaliser**: Indian number format normalisation to E.164 (`+91XXXXXXXXXX`).
-- **Queue Client**: Upstash Redis-backed FIFO queue with cron drain handler.
+- **Zod Config Validator**, **Webhooks** (Zoho HMAC, Twilio signature), **Rules Engine v1**, **Session Window**, **Twilio Dispatcher**, **Phone Normaliser**, **Queue Client**.
