@@ -54,11 +54,16 @@ export async function GET(request: Request) {
         from:             PRIMARY_SENDER,
         contentSid,
         templateName:     'wa_followup_1',
+        leadId:           lead.id,
         contentVariables: JSON.stringify({ "1": lead.name ?? 'there' }),
       });
       await supabase
         .from('leads')
-        .update({ wa_state: 'followup_sent', wa_last_outbound_at: new Date().toISOString() })
+        .update({ 
+          wa_state: 'followup_sent', 
+          wa_last_outbound_at: new Date().toISOString(),
+          wa_last_template: 'wa_followup_1' 
+        })
         .eq('id', lead.id);
       results.push(`rule5:${lead.phone_normalised}`);
     } catch (err) {
@@ -88,11 +93,15 @@ export async function GET(request: Request) {
         from:             PRIMARY_SENDER,
         contentSid,
         templateName:     'wa_track_selector',
+        leadId:           lead.id,
         contentVariables: JSON.stringify({ "1": lead.name ?? 'there' }),
       });
       await supabase
         .from('leads')
-        .update({ wa_last_outbound_at: new Date().toISOString() })
+        .update({ 
+          wa_last_outbound_at: new Date().toISOString(),
+          wa_last_template: 'wa_track_selector'
+        })
         .eq('id', lead.id);
       results.push(`rule6a:${lead.phone_normalised}`);
     } catch (err) {
@@ -122,11 +131,15 @@ export async function GET(request: Request) {
         from:             PRIMARY_SENDER,
         contentSid,
         templateName:     'wa_followup_2_quickreply',
+        leadId:           lead.id,
         contentVariables: JSON.stringify({ "1": lead.name ?? 'there' }),
       });
       await supabase
         .from('leads')
-        .update({ wa_last_outbound_at: new Date().toISOString() })
+        .update({ 
+          wa_last_outbound_at: new Date().toISOString(),
+          wa_last_template: 'wa_followup_2_quickreply'
+        })
         .eq('id', lead.id);
       results.push(`rule6b:${lead.phone_normalised}`);
     } catch (err) {

@@ -60,9 +60,10 @@ export async function createAndLaunchCampaign(name: string, templateVariantId: s
   for (const lead of leads) {
     try {
       await enqueueOutboundMessage({
-        to: lead.phone_normalised,
-        contentSid: templateVariantId,
-        // any custom variables would go here 
+        to:               lead.phone_normalised,
+        contentSid:       templateVariantId,
+        leadId:           lead.id,
+        templateName:     name, // Use campaign name as symbolic template name for tracking
       });
       enqueued++;
     } catch (err) {

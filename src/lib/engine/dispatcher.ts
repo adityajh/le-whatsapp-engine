@@ -11,6 +11,8 @@ export interface DispatchOptions {
   contentSid?: string; // Twilio Content API template SID (replaces templates)
   contentVariables?: Record<string, string>; // Variables for Content API
   mediaUrl?: string[];
+  leadId?: string; // Optional: Supabase lead UUID for recording
+  templateName?: string; // Optional: Symbolic name of the template
 }
 
 import { getTwilioTemplateSid } from '../twilio/templates';
@@ -90,6 +92,49 @@ export async function dispatchMessage(opts: DispatchOptions) {
 
     const message = await twilioClient.messages.create(messageParams);
     
+    // 4. Record outbound message in Supabase (Immutable Log)
+    // Analytics depends on 'direction' = 'outbound' and 'template_variant_id' being set
+    try {
+      let finalLeadId = opts.leadId;
+      if (!finalLeadId) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('phone_normalised', opts.to)
+          .single();
+        finalLeadId = lead?.id;
+      }
+
+      if (finalLeadId) {
+        await supabase.from('messages').insert({
+          lead_id:             finalLeadId,
+          twilio_sid:          message.sid,
+          phone_normalised:    opts.to,
+          direction:           'outbound',
+          body:                message.body,
+          status:              'sent',
+          template_id:         opts.templateName, // The symbolic name (e.g. wa_welcome_meta)
+          template_variant_id: messageParams.contentSid, // The actual HX... SID
+          sender_number:       opts.from || config.TWILIO_MESSAGING_SERVICE_SID || 'system',
+          created_at:          new Date().toISOString(),
+        });
+
+        // 5. Update lead's last-contact markers for analytics & state tracking
+        await supabase
+          .from('leads')
+          .update({
+            wa_last_outbound_at: new Date().toISOString(),
+            wa_last_template:    opts.templateName || null,
+            wa_last_twilio_sid:  message.sid,
+            wa_last_status:      'sent',
+          })
+          .eq('id', finalLeadId);
+      }
+    } catch (saveErr) {
+      console.warn('[Dispatcher] Failed to record outbound message or update lead in DB:', saveErr);
+      // Don't throw, we've already sent the message
+    }
+
     console.log(`[Dispatcher] Successfully queued message SID: ${message.sid} to ${opts.to}`);
     return message;
   } catch (err: any) {

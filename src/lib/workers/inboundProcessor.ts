@@ -114,7 +114,7 @@ export async function processInboundMessage(job: { data: Record<string, string> 
     .from('leads')
     .update(leadUpdate)
     .eq('phone_normalised', cleanPhone)
-    .select('zoho_lead_id, owner_email, lead_track, name')
+    .select('id, zoho_lead_id, owner_email, lead_track, name')
     .single();
 
   if (leadError && leadError.code !== 'PGRST116') {
@@ -171,6 +171,7 @@ export async function processInboundMessage(job: { data: Record<string, string> 
         from:             PRIMARY_SENDER,
         contentSid,
         templateName:     'wa_counsellor_intro',
+        leadId:           lead?.id || currentLead?.id,
         contentVariables: JSON.stringify({ "1": name }),
       });
       console.log(`[InboundProcessor] Queued wa_counsellor_intro → ${cleanPhone}${trackLabel ? ` (track: ${trackLabel})` : ''}`);
