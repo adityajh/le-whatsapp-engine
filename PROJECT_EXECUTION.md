@@ -187,7 +187,7 @@
 
 ---
 
-## 🟠 PHASE 2 — NEXT SPRINT
+## 🟠 PHASE 3 — NEXT SPRINT
 
 - [ ] **P2.1 — Follow-up cron deduplication**
   - Set new `wa_state` atomically *before* enqueuing in Rules 5 & 6 (not after).
@@ -285,7 +285,7 @@
 | 23 Mar | Admin dashboard | Centralized `/admin` hub | Separate standalone pages |
 | 25 Mar | Content API template delivery | Must use `messagingServiceSid` with Content SIDs (HX...) | Sending from bare phone number (unsupported since Apr 2025) |
 | 25 Mar | Template variable format | Omit `contentVariables` entirely when empty | Pass `contentVariables: {}` (broken — causes 63027) |
-| 25 Mar | Template discovery | Live Twilio Content API with Upstash cache (1hr TTL) | Manual `constants.ts` updates |
+| 25 Mar | Template discovery | Live Twilio Content API with Upstash persistent cache (no TTL — manual Admin Refresh only) | Manual `constants.ts` updates; 1hr TTL removed in Phase 2 |
 | 25 Mar | Reply classification | DB-driven keyword rules (`classification_rules` table, Redis cache 30min) | Hardcoded if/else |
 | 26 Mar | Rules engine architecture | Graph-first (Logic Builder), code fallback for Rules 1–4 | Hardcoded routing only |
 | 26 Mar | Welcome template routing | Source × Persona (5 paths: Meta×Student, Meta×Parent, Organic×Student, Organic×Parent, Manual) | Single template per source (no persona split) |
