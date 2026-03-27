@@ -17,6 +17,9 @@ const envSchema = z.object({
 
   // Zoho
   ZOHO_WEBHOOK_SECRET: z.string().min(1), // Used to validate incoming HMAC signatures
+  ZOHO_CLIENT_ID: z.string().min(1).optional(),
+  ZOHO_CLIENT_SECRET: z.string().min(1).optional(),
+  ZOHO_REFRESH_TOKEN: z.string().min(1).optional(),
 
   // App Config
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -33,6 +36,9 @@ const result = envSchema.safeParse({
   TWILIO_WEBHOOK_SECRET: process.env.TWILIO_WEBHOOK_SECRET,
   TWILIO_MESSAGING_SERVICE_SID: process.env.TWILIO_MESSAGING_SERVICE_SID,
   ZOHO_WEBHOOK_SECRET: process.env.ZOHO_WEBHOOK_SECRET,
+  ZOHO_CLIENT_ID: process.env.ZOHO_CLIENT_ID,
+  ZOHO_CLIENT_SECRET: process.env.ZOHO_CLIENT_SECRET,
+  ZOHO_REFRESH_TOKEN: process.env.ZOHO_REFRESH_TOKEN,
   NODE_ENV: process.env.NODE_ENV,
 });
 

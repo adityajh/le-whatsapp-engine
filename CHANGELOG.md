@@ -5,6 +5,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.2.0] - 2026-03-27 (Phase 2 — Admin Control & Visibility)
+
+### Added
+- **Global Engine Toggle (Kill Switch)**: `EngineToggle` client component in the Admin header. Toggle persists state to the `system_settings` Supabase table via a new `/api/admin/settings` GET/POST endpoint.
+- **`system_settings` table**: New Supabase migration `20260327_system_settings.sql` with RLS and default `engine_enabled = true`.
+- **Kill Switch enforcement**: Both `/api/webhooks/zoho` and `/api/webhooks/twilio/inbound` now check `engine_enabled` at entry and return `200 + "Engine paused"` immediately if disabled — no DB writes, no queued messages.
+- **Zoho Field Mapping page** (`/admin/zoho-mapping`): Reference table showing Internal Key ↔ Zoho Merge Tag ↔ Purpose. Includes copy-ready recommended JSON payload for Zoho Webhook configuration.
+- **"Zoho Field Mapping" card** added to the `/admin` dashboard grid.
+
+### Changed
+- **Admin Layout**: Reverted to clean header-only design with `EngineToggle` in the top right. Sidebar built and removed per UX preference.
+- **Template cache**: Removed 1-hour TTL from Redis. Templates now stored indefinitely and only refreshed on manual Admin "Refresh" button press.
+- **Dispatcher safety layer**: `dispatchMessage()` now calls `getTwilioTemplateSid()` immediately before the Twilio API call. Catches symbolic names or stale SIDs queued before the cache was refreshed.
+
+---
+
+## [3.1.0] - 2026-03-27 (Phase 1 Complete — Zoho CRM Integration & Multi-Source Mapping)
+
+### Added
+- **Zoho CRM Writeback** (`src/lib/zoho.ts`): Implemented OAuth 2.0 refresh token flow with Redis caching (55min TTL).
+- **Active Sync**: `inboundProcessor.ts` now writes `WA_Reply_Class`, `WA_Hotness`, and `WA_Last_Inbound_At` to Zoho CRM in real-time.
+- **Diagnostic Logging**: `inbound/route.ts` adds verbose raw body logging to verify `ButtonPayload` from Twilio.
+- **Zoho Env Vars**: `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN` added to config schema.
+
+### Changed
+- **Multi-Field Mapping**: Zoho webhook now supports both internal and display names for `Program`, `Persona`, `Academic Level`, and `Relocation`.
+- **Storysells Routing**: Workflow seed updated to route Storysells leads to `wa_welcome_manual` instead of silent skip.
+
+### Fixed
+- **Lead re-upsert sanity**: Contact updates from Zoho now preserve `wa_state` and `wa_opt_in` for leads already in sequence.
+- **Payload Redeclaration**: Fixed a block-scope variable error in the Zoho webhook route.
+
+---
+
 ## [3.0.0] - 2026-03-26 (Rules Engine v3 — Full Template Suite + Button Payloads)
 
 ### Added
@@ -14,13 +48,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`wa_welcome_meta_parent`** (`HXd97f088d39cd2f46bf189a3839eeb8ce`) — Meta Ads, Parent persona
 - **`wa_welcome_organic_student`** (`HX5f55c702e5b379893cf79f9a0f492e6e`) — Website/Organic, Student persona
 - **`wa_welcome_organic_parent`** (`HXdad3576db7480fcf3e61c780221df990`) — Website/Organic, Parent persona
-- **`wa_welcome_manual`** — Manual/Phone/Instagram/Referral (SID pending approval)
-- **`wa_followup_1`** — 24h no-reply follow-up, hard stop (SID pending approval)
+- **`wa_welcome_manual`** (`HX754c828d62941b79c72589...`) — Manual/Phone/Instagram/Referral ✅ Approved
+- **`wa_followup_1`** (`HX9a5464b3d23fcc28453d5a3...`) — 24h no-reply follow-up, hard stop ✅ Approved
 - **`wa_followup_2_quickreply`** (`HX99c54dea1ea1d4fec682ee78452c0831`) — Post-reply 48h silence, 3-button quick reply
 - **`wa_track_selector`** (`HXddf8ea9d9d01a0cc51dc6419909abb20`) — Track selection: Enterprise Leadership / Family Business / Venture Builder
 - **`wa_webinar_cta`** (`HXe5d3fdede430efb27b5e7c50bed1b55a`) — Parent webinar RSVP, campaign-only
-- **`wa_counsellor_intro`** — Sent on interested/fee_question/track-selector tap (SID pending approval)
-- All 10 templates registered in `src/lib/constants.ts` with `TEMPLATE_SIDS` map
+- **`wa_counsellor_intro`** (`HX98acc8cb7caf053b138a8fd...`) — Sent on interested/fee_question/track-selector tap ✅ Approved
+- All 10 templates registered via **dynamic live lookup** from Twilio Content API — no static SIDs needed
 
 #### Rules Engine v3 — Programmatic Rules 1–4
 - **Rule 1 (Program filter):** Storysells leads routed to `wa_welcome_manual` (placeholder) instead of silent skip. All other programs continue.

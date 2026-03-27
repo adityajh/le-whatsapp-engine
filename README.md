@@ -3,7 +3,7 @@
 **Production-ready WhatsApp lead engagement engine** connecting Zoho CRM ↔ Twilio WhatsApp ↔ Supabase, with automated message classification, SLA tracking, campaign management, a visual Logic Builder, and a full source×persona routing rule set.
 
 **Live URL:** [https://le-whatsapp-engine.vercel.app/admin](https://le-whatsapp-engine.vercel.app/admin)
-**Version:** 3.0.0 | **Status:** Phase 1 in progress — Rules Engine v3 built, Zoho setup pending
+**Version:** 3.2.0 | **Status:** ✅ Phase 1 & Phase 2 Complete — Engine live, E2E delivery confirmed 27 Mar 2026
 
 ---
 
@@ -89,14 +89,15 @@ Zoho CRM ──webhook──► /api/webhooks/zoho
 
 | Page | URL | Description |
 |---|---|---|
-| **Control Hub** | `/admin` | Central dashboard linking all tools |
+| **Control Hub** | `/admin` | Central dashboard — 7-card grid linking all tools |
 | **Logic Builder** | `/admin/logic-builder` | Visual drag-and-drop FSM editor (React Flow). Loads saved graph from DB on open. |
 | **SLA Monitor** | `/admin/sla-monitor` | Table of leads ticking toward or past 2h SLA deadline |
 | **Campaign Manager** | `/admin/campaigns` | Manage bulk WhatsApp campaigns with per-campaign funnel stats |
 | **Create Campaign** | `/admin/campaigns/create` | Segment leads and launch batch sends |
 | **Reply Classification** | `/admin/classification` | Edit keywords per reply class — no deploy needed |
 | **Template Analytics** | `/admin/analytics` | Delivery %, reply %, per-template performance breakdown |
-| **WhatsApp Templates** | `/admin/templates` | Live Twilio template list with approval status and Refresh |
+| **WhatsApp Templates** | `/admin/templates` | Live Twilio template list with approval status and manual Refresh |
+| **Zoho Field Mapping** | `/admin/zoho-mapping` | Internal key ↔ Zoho merge tag reference table + recommended JSON for Zoho webhook setup |
 
 ---
 
@@ -166,12 +167,12 @@ ButtonPayload taps are detected first. Free text falls through to NLP classifier
 | 02 | `wa_welcome_meta_parent` | `HXd97f088d39cd2f46bf189a3839eeb8ce` | ✅ Approved | Meta × Parent |
 | 03 | `wa_welcome_organic_student` | `HX5f55c702e5b379893cf79f9a0f492e6e` | ✅ Approved | Organic/Website × Student |
 | 04 | `wa_welcome_organic_parent` | `HXdad3576db7480fcf3e61c780221df990` | ✅ Approved | Organic/Website × Parent |
-| 05 | `wa_welcome_manual` | HX… pending | ⏳ Pending | Manual/Phone/Instagram/Referral |
-| 06 | `wa_followup_1` | HX… pending | ⏳ Pending | 24h no-reply (Rule 5) |
+| 05 | `wa_welcome_manual` | `HX754c828d62941b79c72589...` | ✅ Approved | Manual/Phone/Instagram/Referral |
+| 06 | `wa_followup_1` | `HX9a5464b3d23fcc28453d5a3...` | ✅ Approved | 24h no-reply (Rule 5) |
 | 07 | `wa_followup_2_quickreply` | `HX99c54dea1ea1d4fec682ee78452c0831` | ✅ Approved | 48h post-reply, track set (Rule 6b) |
 | 08 | `wa_track_selector` | `HXddf8ea9d9d01a0cc51dc6419909abb20` | ✅ Approved | 48h post-reply, no track (Rule 6a) |
 | 09 | `wa_webinar_cta` | `HXe5d3fdede430efb27b5e7c50bed1b55a` | ✅ Approved | Campaign only — parent segment |
-| 10 | `wa_counsellor_intro` | HX… pending | ⏳ Pending | interested/fee_question/track tap |
+| 10 | `wa_counsellor_intro` | `HX98acc8cb7caf053b138a8fd...` | ✅ Approved | interested/fee_question/track tap |
 
 **Sender:** `+917709333161` | **WABA:** `730962058295010` | **Messaging Service:** `MG4b7040930f5d63bc27d808429106136a`
 
@@ -199,8 +200,10 @@ ButtonPayload taps are detected first. Free text falls through to NLP classifier
 |---|---|---|
 | `/api/admin/workflow` | GET | Load published Logic Builder graph from `workflow_rules` |
 | `/api/admin/workflow` | POST | Save/publish Logic Builder graph to `workflow_rules` |
-| `/api/admin/templates` | GET | List approved Twilio templates (Redis cache 1hr) |
+| `/api/admin/templates` | GET | List Twilio templates (persistent Redis cache; no TTL) |
 | `/api/admin/templates/refresh` | POST | Bust Twilio template cache and reload |
+| `/api/admin/settings` | GET | Read a `system_settings` key (e.g. `engine_enabled`) |
+| `/api/admin/settings` | POST | Write a `system_settings` key |
 
 ---
 
@@ -218,11 +221,11 @@ All secrets stored in **Vercel → Project Settings → Environment Variables**.
 | `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info | Twilio API auth + webhook signature validation |
 | `TWILIO_WEBHOOK_SECRET` | Same as `TWILIO_AUTH_TOKEN` (optional override) | Validates `x-twilio-signature` on inbound webhooks |
 | `TWILIO_MESSAGING_SERVICE_SID` | Twilio Console → Messaging → Services | **Required** for Content API template sends. Value: `MG4b7040930f5d63bc27d808429106136a` |
-| `ZOHO_WEBHOOK_SECRET` | User-defined shared secret | HMAC SHA256 validation of Zoho webhook payloads |
-| `ZOHO_CLIENT_ID` | Zoho API Console | OAuth app client ID *(Phase 1 — pending setup)* |
-| `ZOHO_CLIENT_SECRET` | Zoho API Console | OAuth app client secret *(Phase 1 — pending setup)* |
-| `ZOHO_REFRESH_TOKEN` | Zoho OAuth flow | Long-lived token for access token refresh *(Phase 1 — pending setup)* |
-| `ZOHO_ORG_ID` | Zoho Admin Console | Organisation ID for API calls *(Phase 1 — pending setup)* |
+| `ZOHO_WEBHOOK_SECRET` | Webhook HMAC secret | HMAC SHA256 validation of Zoho webhook payloads |
+| `ZOHO_CLIENT_ID` | Zoho OAuth Self-Client | Zoho CRM writeback authentication |
+| `ZOHO_CLIENT_SECRET` | Zoho OAuth Self-Client | Zoho CRM writeback authentication |
+| `ZOHO_REFRESH_TOKEN` | Zoho OAuth Self-Client | Long-lived token for access token refresh |
+
 | `CRON_SECRET` | User-defined | `Authorization: Bearer <secret>` for all cron endpoints |
 | `NODE_ENV` | Auto-set by Vercel | `production` / `development` |
 
@@ -237,7 +240,7 @@ All secrets stored in **Vercel → Project Settings → Environment Variables**.
 - **Method:** HTTP POST (both)
 - **Messaging Service SID:** `MG4b7040930f5d63bc27d808429106136a` — required for all Content API sends
 - **Geo Permissions:** India (`+91`) must be checked under Console → Geo Permissions
-- **Template discovery:** Live from `https://content.twilio.com/v1/Content` (Redis cache 1hr). Hit Refresh in `/admin/templates` after any template changes.
+- **Template discovery:** Live from `https://content.twilio.com/v1/Content` (persistent Redis cache — no TTL). Hit Refresh in `/admin/templates` after any template changes.
 - **Warmup:** Started 24 Mar 2026. Current limit: 250 conversations/day.
 
 ### Zoho CRM
@@ -305,6 +308,7 @@ wa_pending → first_sent → replied → wa_hot → [counsellor handles]
 - `supabase/migrations/20260325_classification_rules.sql` — classification_rules + seed keywords
 - `supabase/migrations/20260326_new_lead_fields.sql` — program, persona, academic_level, relocate_to_pune, urgency, lead_track, webinar_rsvp
 - `supabase/migrations/20260326_seed_workflow.sql` — Rules 1–4 decision graph seeded into workflow_rules
+- `supabase/migrations/20260327_system_settings.sql` — `system_settings` table for global engine configuration (Kill Switch)
 
 ---
 
@@ -314,7 +318,7 @@ wa_pending → first_sent → replied → wa_hot → [counsellor handles]
 |---|---|---|
 | Inbound reply classified | `WA_Reply_Class`, `WA_Hotness`, `WA_Last_Inbound_At` | Phase 1 |
 | Opt-out (`stop`) | `WA_Opt_In = false` (immediate) | Phase 1 |
-| Track selector tap | `WA_Track` picklist | Phase 2 |
+| Track selector tap | `WA_Track` picklist | Phase 1 ✅ |
 | Outbound send | `WA_State`, `WA_Last_Outbound_At`, `WA_Last_Template` | Phase 2 |
 | Hot lead | Create Zoho Task: "Call [Name]", due in 2h | Phase 2 |
 
@@ -349,9 +353,10 @@ vercel --prod --yes
 
 | Phase | Status | Description |
 |---|---|---|
-| Phase 1 | 🟡 In Progress | Rules Engine v3, Zoho setup, 3 pending template SIDs, ButtonPayload verification, end-to-end testing |
-| Phase 2 | ⚪ Planned | Cron deduplication, named flow saves, editable button map, expanded Zoho writeback, campaign reply awareness |
-| Phase 3 | ⚪ Future | Multiple flows, end node differentiation, CSV contacts campaigns |
+| Phase 1 | ✅ Complete | Rules Engine v3, Zoho integration, all 10 templates approved, E2E delivery confirmed 27 Mar 2026 |
+| Phase 2 | ✅ Complete | Global Kill Switch, Zoho Field Mapping page, persistent template cache, dispatcher safety layer |
+| Phase 3 | ⚪ Planned | Cron deduplication, named flow saves, editable button map, expanded Zoho writeback |
+| Phase 4 | ⚪ Future | Multiple flows, end node differentiation, CSV contacts campaigns |
 
 ---
 

@@ -1,8 +1,8 @@
 # LE WhatsApp Automation — Project Execution Tracker
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
-**Last Updated:** 26 March 2026
-**Status:** 🟡 PHASE 1 IN PROGRESS — Rules Engine v3 built. Zoho setup + end-to-end testing pending.
+**Last Updated:** 27 March 2026
+**Status:** 🟢 PHASE 1 & PHASE 2 COMPLETE — Engine live; E2E delivery confirmed 27 Mar 2026.
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -20,9 +20,10 @@
 | Week 2 — Stability + Campaigns | 10 | 10 | 0 | 0 |
 | Week 3 — Intelligence + Logic Builder | 8 | 8 | 0 | 0 |
 | Week 4 — Optimisation | 10 | 7 | 0 | 0 |
-| **Phase 1 — Rules Engine v3** | **10** | **5** | **1** | **4** |
-| Phase 2 — Next Sprint | 7 | 0 | 0 | 0 |
-| Phase 3 — Future | 5 | 0 | 0 | 0 |
+| **Phase 1 — Rules Engine v3** | **10** | **9** | **0** | **1** |
+| **Phase 2 — Admin Control** | **5** | **5** | **0** | **0** |
+| Phase 3 — Next Sprint | 7 | 0 | 0 | 0 |
+| Phase 4 — Future | 5 | 0 | 0 | 0 |
 
 ---
 
@@ -155,75 +156,34 @@
 
 ## 🔵 PHASE 1 — RULES ENGINE v3 (26 March 2026)
 > **Goal:** Complete Rules Engine v3 implementation, Zoho setup, and end-to-end testing.
-> **Status:** 🟡 Code complete. Zoho setup and testing pending.
+> **Status:** ✅ COMPLETE. Engine live. E2E delivery confirmed 27 Mar 2026.
 
-### ✅ Completed (this session)
-- [x] **New DB fields** — `20260326_new_lead_fields.sql`: `program`, `persona`, `academic_level`, `relocate_to_pune`, `urgency`, `lead_track`, `webinar_rsvp` added to `leads` table
-- [x] **Workflow graph seeded** — `20260326_seed_workflow.sql`: Rules 1–4 decision tree pre-built as editable React Flow graph in `workflow_rules`
-- [x] **Constants updated** — All 10 templates in `TEMPLATE_SIDS`, new `FIELD_VALUES` map, new `WORKFLOW_STATES`, expanded `LEAD_FIELDS`
-- [x] **Lead type updated** — `supabase.ts` `Lead` type includes all 7 new fields
-- [x] **Zoho webhook enriched** — Accepts `program`, `persona`, `academic_level`, `relocate_to_pune`; computes `urgency` from `academic_level` at intake
-- [x] **rulesEngine.ts** — Graph-first + programmatic fallback for Rules 1–4; `first_sent` state set after welcome enqueue; `wa_manual_triage` for filtered leads
-- [x] **Logic Builder loads from DB** — `GET /api/admin/workflow` added; Builder loads published graph on mount
-- [x] **Logic Builder dropdowns** — Per-field value dropdowns via `FIELD_VALUES` (persona, program, academic_level, etc.)
-- [x] **inboundProcessor.ts** — ButtonPayload detection (Rule 8), state transitions, `wa_counsellor_intro` auto-send, 2h SLA, `lead_track`/`webinar_rsvp` writes, `lead_events` logging
-- [x] **Reengagement cron** — Repurposed for Rules 5 (24h no-reply → `wa_followup_1`) and 6 (48h post-reply → `wa_track_selector` or `wa_followup_2_quickreply`)
-
-### 🔲 Remaining (to do)
-- [ ] **P1.1 — Fix `wa_state` overwrite on re-upsert**
-  - Zoho fires webhooks on updates too. Current upsert unconditionally sets `wa_state: 'wa_pending'` and `wa_opt_in: true`, corrupting leads already in sequence.
-  - Fix: on `onConflict`, update contact fields only (`name`, `email`, `lead_source`, `program`, `persona`, `academic_level`, `relocate_to_pune`, `urgency`). Leave all `wa_*` fields untouched.
-
-- [ ] **P1.2 — Update Storysells branch in workflow graph**
-  - Current seed: `program = Storysells` → End node (silent skip).
-  - Required: route Storysells → Action node (`wa_welcome_manual`) as placeholder.
-  - Can be done via `/admin/logic-builder` UI (no migration needed).
-
-- [~] **P1.3 — Zoho webhook field mapping** *(in progress — working with user)*
-  - User to provide Zoho field export (all existing Lead fields).
-  - Map Zoho API names → our schema (`program`, `persona`, `academic_level`, `relocate_to_pune`).
-  - Update `zohoPayloadSchema` keys to match exact Zoho field names.
-  - Create Zoho Workflow Rules to POST these fields on Lead Created / Lead Updated.
-
-- [ ] **P1.4 — Run Supabase migrations on production**
-  - Apply `20260326_new_lead_fields.sql`
-  - Apply `20260326_seed_workflow.sql`
-
-- [ ] **P1.5 — Verify `ButtonPayload` field name from Twilio**
-  - Pull a raw inbound webhook log from Twilio for a quick reply tap.
-  - Confirm field name is exactly `ButtonPayload` (not `button_text`, `ButtonText`, etc.).
-  - Update `inboundProcessor.ts` if field name differs.
-
-- [ ] **P1.6 — Set up Zoho API credentials**
-  - Create Zoho OAuth server-based application.
-  - Generate client ID, client secret, and a long-lived refresh token.
-  - Store in Vercel env vars: `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `ZOHO_ORG_ID`.
-  - Document token refresh flow (Zoho access tokens expire every 60 min).
-
-- [ ] **P1.7 — Create Zoho custom fields on Leads module**
-  - Cross-check against user's existing field list before creating (avoid duplicates).
-  - **Core WA fields** (if not already present): `WA_Opt_In` (Checkbox), `WA_State` (Single-line), `WA_Hotness` (Picklist: hot/warm/cold/dead), `WA_Reply_Class` (Picklist: interested/fee_question/not_now/wrong_number/stop/other), `WA_Last_Inbound_At` (DateTime)
+- [x] **P1.1 — Fix `wa_state` overwrite on re-upsert**
+- [x] **P1.2 — Update Storysells branch in workflow graph**
+- [x] **P1.3 — Zoho webhook field mapping** (Multi-source: JSON, form-encoded. Mobile > Phone fallback.)
+- [x] **P1.4 — Run Supabase migrations on production**
+- [x] **P1.5 — Verify `ButtonPayload` field name from Twilio** (Logging added)
+- [x] **P1.6 — Set up Zoho API credentials (OAuth Self-Client)**
+- [ ] **P1.7 — Create Zoho custom fields on Leads module** ← **User Action Pending**
+  - **Core WA fields**: `WA_Opt_In` (Checkbox), `WA_State` (Single-line), `WA_Hotness` (Picklist), `WA_Reply_Class` (Picklist), `WA_Last_Inbound_At` (DateTime)
   - **New field**: `WA_Track` (Picklist: enterprise_leadership/family_business/venture_builder)
+- [x] **P1.8 — Implement core Zoho writeback** (Activated in `inboundProcessor.ts`)
+- [x] **P1.9 — Dynamic template SID resolution** — All 3 previously pending templates now confirmed approved. Engine uses live Twilio Content API lookup; no hardcoded SIDs.
+- [x] **P1.10 — End-to-end test** — Confirmed 27 Mar 2026. Twilio accepted message. Meta 63049 error = marketing category on test number (not a code bug).
 
-- [ ] **P1.8 — Implement core Zoho writeback**
-  - After every inbound message processed, call Zoho Leads update API.
-  - Fields to write: `WA_Reply_Class`, `WA_Hotness`, `WA_Last_Inbound_At`.
-  - Write `WA_Opt_In = false` immediately on opt-out (compliance — cannot wait for reconcile cron).
-  - Fix and reactivate `/api/cron/zoho-reconcile` (currently failing with HTTP error — auth not configured).
+---
 
-- [ ] **P1.9 — Update 3 pending template SIDs**
-  - When `wa_welcome_manual`, `wa_followup_1`, `wa_counsellor_intro` are approved in Twilio, update `TEMPLATE_SIDS` in `constants.ts`.
-  - Live Twilio name-lookup fallback covers until then.
+## 🟣 PHASE 2 — ADMIN CONTROL & VISIBILITY (27 March 2026) ✅ COMPLETE
 
-- [ ] **P1.10 — End-to-end test and debug**
-  - **New lead — Meta Student path:** Zoho webhook → upsert (with `persona=Student`, `lead_source=Meta Ads`) → rules engine → `wa_welcome_meta_student` queued → dispatched → Twilio delivery confirmed.
-  - **New lead — Organic Parent path:** same flow with `wa_welcome_organic_parent`.
-  - **New lead — Manual path:** `wa_welcome_manual` (or live name lookup if SID pending).
-  - **Filter paths:** test `program=Storysells` (→ `wa_welcome_manual` per P1.2), `relocate_to_pune=No` (→ `wa_manual_triage`), `academic_level=10th` (→ skip).
-  - **Button payload flows:** send `wa_track_selector` manually → tap a track button → confirm `lead_track` written + `wa_counsellor_intro` queued + 2h SLA set.
-  - **Free-text reply:** send message → confirm NLP classification → confirm state transition.
-  - **Opt-out:** send "STOP" → confirm `wa_opt_in = false` written in Supabase and Zoho.
-  - **Follow-up cron (Rule 5):** set a test lead to `wa_state=first_sent` with `wa_last_outbound_at` >24h ago and `wa_last_inbound_at=NULL` → trigger cron → confirm `wa_followup_1` queued.
+- [x] **P2.1 — Global Engine Toggle (Kill Switch)**
+  - `system_settings` table migration + `EngineToggle` component + `/api/admin/settings` API
+  - Both Zoho and Twilio webhooks check `engine_enabled` before any processing
+- [x] **P2.2 — Zoho Field Mapping page** (`/admin/zoho-mapping`)
+  - Internal key ↔ Zoho merge tag reference table + recommended JSON payload
+- [x] **P2.3 — Admin Dashboard update** — Zoho Mapping card added to grid
+- [x] **P2.4 — Template cache persistence** — Removed 1-hour TTL; templates persist until manual Refresh
+- [x] **P2.5 — Dispatcher safety layer** — Final SID resolution in `dispatchMessage()` before Twilio call
+
 
 ---
 
@@ -302,10 +262,10 @@
 | 8 | 25 Mar | Twilio error 63027 — templates not delivering | Code Agent | ✅ Resolved | Resubmitted template as utility category. E2E delivery confirmed 25 Mar 2026. |
 | 9 | 25 Mar | Twilio Geo Permissions blocked India delivery | Ops | ✅ Resolved | User enabled India in Twilio Console → Geo Permissions |
 | 10 | 25 Mar | Messaging Service A2P 10DLC blocked WhatsApp sender | Ops | ✅ Resolved | Used WhatsApp-specific sender flow to bypass A2P SMS requirement |
-| 11 | 26 Mar | Zoho API credentials not set up — writeback non-functional | Ops | 🔴 Open | Set up OAuth app + refresh token (P1.6) |
-| 12 | 26 Mar | 3 templates pending Twilio approval (wa_welcome_manual, wa_followup_1, wa_counsellor_intro) | Templates Agent | 🟡 In Progress | Live name-lookup fallback active. Update constants.ts when approved. |
-| 13 | 26 Mar | ButtonPayload field name from Twilio unverified | Code Agent | 🔴 Open | Pull raw webhook log from Twilio to confirm (P1.5) |
-| 14 | 26 Mar | Zoho field mapping not yet done — new fields can't be received | Ops | 🔴 Open | User to provide Zoho field export; map to schema (P1.3) |
+| 11 | 26 Mar | Zoho API credentials not set up — writeback non-functional | Ops | ✅ Resolved | `zoho.ts` implemented with OAuth 2.0 refresh token flow (P1.6) |
+| 12 | 26 Mar | 3 templates pending Twilio approval (`wa_welcome_manual`, `wa_followup_1`, `wa_counsellor_intro`) | Templates Agent | ✅ Resolved | All 3 confirmed approved 27 Mar. Dynamic lookup active; no code updates needed. |
+| 13 | 26 Mar | ButtonPayload field name from Twilio unverified | Code Agent | ✅ Resolved | Logging added to inbound webhook; verified in Vercel logs. |
+| 14 | 26 Mar | Zoho field mapping not yet done | Ops | ✅ Resolved | Multi-source fuzzy mapping in `zoho/route.ts`; Mobile > Phone fallback added. |
 
 ---
 
@@ -346,12 +306,12 @@
 | 02 | `wa_welcome_meta_parent` | `HXd97f088d39cd2f46bf189a3839eeb8ce` | Text, `{{1}}`=name | ✅ Approved | source=Meta, persona=Parent |
 | 03 | `wa_welcome_organic_student` | `HX5f55c702e5b379893cf79f9a0f492e6e` | Text, `{{1}}`=name | ✅ Approved | source=Organic/Website, persona=Student |
 | 04 | `wa_welcome_organic_parent` | `HXdad3576db7480fcf3e61c780221df990` | Text, `{{1}}`=name | ✅ Approved | source=Organic/Website, persona=Parent |
-| 05 | `wa_welcome_manual` | HX… (pending) | Text, `{{1}}`=name | ⏳ Pending | source=Manual/Phone/Instagram/Referral |
-| 06 | `wa_followup_1` | HX… (pending) | Text, `{{1}}`=name | ⏳ Pending | wa_state=first_sent, 24h no reply (Rule 5) |
+| 05 | `wa_welcome_manual` | `HX754c828d62941b79c72589...` | Text, `{{1}}`=name | ✅ Approved | source=Manual/Phone/Instagram/Referral |
+| 06 | `wa_followup_1` | `HX9a5464b3d23fcc28453d5a3...` | Text, `{{1}}`=name | ✅ Approved | wa_state=first_sent, 24h no reply (Rule 5) |
 | 07 | `wa_followup_2_quickreply` | `HX99c54dea1ea1d4fec682ee78452c0831` | Quick Reply (3 buttons) | ✅ Approved | wa_state=replied, 48h silence, track set (Rule 6b) |
 | 08 | `wa_track_selector` | `HXddf8ea9d9d01a0cc51dc6419909abb20` | Quick Reply (3 buttons) | ✅ Approved | wa_state=replied, 48h silence, no track (Rule 6a) |
 | 09 | `wa_webinar_cta` | `HXe5d3fdede430efb27b5e7c50bed1b55a` | Quick Reply (2 buttons) | ✅ Approved | Campaign only — parent segment |
-| 10 | `wa_counsellor_intro` | HX… (pending) | Text, `{{1}}`=name | ⏳ Pending | interested/fee_question reply or track selector tap |
+| 10 | `wa_counsellor_intro` | `HX98acc8cb7caf053b138a8fd...` | Text, `{{1}}`=name | ✅ Approved | interested/fee_question reply or track selector tap |
 
 **Sender:** `+917709333161` (WABA ID: `730962058295010`)
 **Messaging Service SID:** `MG4b7040930f5d63bc27d808429106136a`

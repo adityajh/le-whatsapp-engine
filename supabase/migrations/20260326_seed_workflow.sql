@@ -55,7 +55,7 @@ INSERT INTO workflow_rules (
   -- actions_json = ReactFlow edges array
   '[
     {"id":"e-t1-c1","source":"t1","target":"c1"},
-    {"id":"e-c1-true","source":"c1","target":"e1","sourceHandle":"true","label":"Yes (Storysells)"},
+    {"id":"e-c1-true","source":"c1","target":"a7","sourceHandle":"true","label":"Yes (Storysells)"},
     {"id":"e-c1-false","source":"c1","target":"c2","sourceHandle":"false","label":"No"},
     {"id":"e-c2-true","source":"c2","target":"e2","sourceHandle":"true","label":"Yes (No Reloc)"},
     {"id":"e-c2-false","source":"c2","target":"c3","sourceHandle":"false","label":"No"},

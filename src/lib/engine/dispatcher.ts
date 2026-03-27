@@ -13,6 +13,7 @@ export interface DispatchOptions {
   mediaUrl?: string[];
 }
 
+import { getTwilioTemplateSid } from '../twilio/templates';
 import { supabase } from '../supabase';
 
 /**
@@ -62,7 +63,20 @@ export async function dispatchMessage(opts: DispatchOptions) {
     }
 
     if (opts.contentSid) {
-      messageParams.contentSid = opts.contentSid;
+      // Resolve symbolic names or resolve if empty/placeholder
+      const resolvedSid = await getTwilioTemplateSid(opts.contentSid);
+      
+      if (!resolvedSid || !resolvedSid.startsWith('HX')) {
+        console.error(`[Dispatcher] Could not resolve a valid ContentSid for "${opts.contentSid}". Found: "${resolvedSid}"`);
+        // If it's already an HX sid, let it through as a last resort, otherwise fail early
+        if (opts.contentSid.startsWith('HX')) {
+          messageParams.contentSid = opts.contentSid;
+        } else {
+          return null; 
+        }
+      } else {
+        messageParams.contentSid = resolvedSid;
+      }
       // Always send contentVariables if using contentSid, with a fallback
       // Meta often rejects 63027 if a template expects variables and they are missing.
       messageParams.contentVariables = JSON.stringify(

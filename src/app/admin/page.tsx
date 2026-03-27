@@ -82,6 +82,18 @@ export default function AdminDashboardPage() {
           </div>
         </Link>
 
+        <Link href="/admin/zoho-mapping" className="group block">
+          <div className="bg-white border rounded-xl p-6 h-full shadow-sm hover:shadow-md hover:border-indigo-500 transition-all">
+            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">Zoho Field Mapping</h3>
+            <p className="text-gray-500 text-sm">Review how Zoho CRM lead fields map to the engine's internal schema and get the recommended JSON payload.</p>
+          </div>
+        </Link>
+
       </div>
     </div>
   );

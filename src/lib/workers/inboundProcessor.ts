@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { classifyReply } from '@/lib/engine/classifier';
 import { enqueueOutboundMessage } from '@/lib/queue/client';
 import { getTwilioTemplateSid } from '@/lib/twilio/templates';
+import { updateZohoLead } from '@/lib/zoho';
 
 const PRIMARY_SENDER = '+917709333161';
 
@@ -183,9 +184,27 @@ export async function processInboundMessage(job: { data: Record<string, string> 
     console.log(`[InboundProcessor] WEBINAR_YES from ${cleanPhone} — counsellor must send joining details manually.`);
   }
 
-  // Zoho writeback stub
+  // ── STEP D: Zoho writeback ───────────────────────────────────────────────
   if (lead?.zoho_lead_id) {
+    const zohoUpdate: any = {
+      WA_Reply_Class:    replyClass,
+      WA_Hotness:        hotness,
+      WA_Last_Inbound_At: now,
+      WA_Opt_In:         waOptIn,
+    };
+
+    // If track was updated, sync that too
+    if (leadTrackUpdate) {
+      zohoUpdate.WA_Track = leadTrackUpdate;
+    }
+
     console.log(`[Zoho Writeback] Syncing ${lead.zoho_lead_id}: class=${replyClass}, hotness=${hotness}`);
+    
+    // Perform async writeback (don't block the reply queue)
+    updateZohoLead(lead.zoho_lead_id, zohoUpdate).catch((err: any) => {
+      console.error(`[Zoho Writeback Fail] ${lead.zoho_lead_id}:`, err);
+    });
+
     if (hotness === 'hot') {
       console.log(`[Alert Engine] Hot Lead → Zoho Task & Email for ${lead.zoho_lead_id}`);
     }

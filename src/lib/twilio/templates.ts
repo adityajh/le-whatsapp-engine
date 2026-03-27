@@ -3,7 +3,6 @@ import { config } from '../config';
 import { TEMPLATE_SIDS } from '../constants';
 
 const CACHE_KEY = 'le:twilio:templates';
-const CACHE_TTL = 3600; // 1 hour
 
 export type TwilioTemplate = {
   sid: string;
@@ -62,7 +61,7 @@ export async function getTwilioTemplates(): Promise<TwilioTemplate[]> {
   if (cached) return cached;
 
   const templates = await fetchFromTwilio();
-  await redisClient.set(CACHE_KEY, templates, { ex: CACHE_TTL });
+  await redisClient.set(CACHE_KEY, templates);
   return templates;
 }
 

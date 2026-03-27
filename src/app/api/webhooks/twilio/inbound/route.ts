@@ -2,9 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import twilio from 'twilio';
 import { config } from '@/lib/config';
 import { enqueueInboundMessage } from '@/lib/queue/client';
+import { supabase } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Global Kill Switch Check
+    const { data: settings } = await supabase
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'engine_enabled')
+      .single();
+    
+    const isEnabled = settings?.value?.value ?? true;
+    if (!isEnabled) {
+      console.log('[Twilio Inbound] ENGINE IS DISABLED via Admin. Skipping processing.');
+      return new NextResponse('Engine paused', { status: 200 });
+    }
+
     // Twilio sends data as application/x-www-form-urlencoded
     const rawBody = await req.text();
     const signature = req.headers.get('x-twilio-signature');
@@ -37,6 +51,7 @@ export async function POST(req: NextRequest) {
     const fromNumber = bodyArgs['From']; // e.g. "whatsapp:+919876543210"
 
     // 3. Send to Processing Queue
+    console.log('[Twilio Inbound Webhook] Raw Body args:', JSON.stringify(bodyArgs, null, 2));
     await enqueueInboundMessage(bodyArgs);
     
     console.log(`[Webhook] Received Inbound Twilio Msg from ${fromNumber}`);

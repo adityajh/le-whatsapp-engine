@@ -13,13 +13,13 @@ export const TEMPLATE_SIDS: Record<string, string> = {
   wa_welcome_meta_parent:     'HXd97f088d39cd2f46bf189a3839eeb8ce',
   wa_welcome_organic_student: 'HX5f55c702e5b379893cf79f9a0f492e6e',
   wa_welcome_organic_parent:  'HXdad3576db7480fcf3e61c780221df990',
-  wa_welcome_manual:          'HX23923d44f51d9a7da14f22cf109ac576', // pending approval — SID TBC
+  wa_welcome_manual:          '', // removed for dynamic lookup
   // Follow-up templates
-  wa_followup_1:              'HXf0af953383a41a1ac25ba99cf8435c8d', // pending approval — SID TBC
+  wa_followup_1:              '', // removed for dynamic lookup
   wa_followup_2_quickreply:   'HX99c54dea1ea1d4fec682ee78452c0831',
   wa_track_selector:          'HXddf8ea9d9d01a0cc51dc6419909abb20',
   // Counsellor + campaigns
-  wa_counsellor_intro:        'HX8241ba1ede5451b564660006d059faa2', // pending approval — SID TBC
+  wa_counsellor_intro:        '', // removed for dynamic lookup
   wa_webinar_cta:             'HXe5d3fdede430efb27b5e7c50bed1b55a',
   // Legacy / deprecated
   wa_welcome_organic:         'HX56142f55de8db39eaadc7ad5fc7aff03',
