@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.3] - 2026-03-27 (Routing + Cooldown Fixes)
+
+### Fixed
+- **`lead_source` always null — wrong field name from Zoho**: Zoho sends `Lead_Source` (underscore, API name) but webhook only checked `lead_source` and `Lead Source` (space). Result: every lead got `wa_welcome_manual` regardless of actual source. Added `Lead_Source` and `Ad_Campaign_Name` underscore variants to mapping.
+- **Cooldown never enforced — wrong column name**: Cooldown query used `.gt('created_at', ...)` but messages table has `sent_at`. Count was always 0, so the 2-message limit was never applied. Fixed to `sent_at`.
+- **Dispatcher: redundant SID re-resolution**: Queue items carry already-resolved HX SIDs. Dispatcher was calling `getTwilioTemplateSid(HX...)` on them — always returned null, fell to last-resort fallback, logged noisy error. Now checks `startsWith('HX')` first and uses directly; only calls `getTwilioTemplateSid` for friendly name strings.
+
+---
+
 ## [3.3.2] - 2026-03-27 (Templates Single Source of Truth)
 
 ### Added

@@ -2,7 +2,7 @@
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
 **Last Updated:** 27 March 2026
-**Status:** 🟢 PHASE 1, 2, 3.3 & 3.4 COMPLETE — Engine live; full E2E confirmed 27 Mar 2026. Templates architecture refactored — single source of truth via Supabase.
+**Status:** 🟢 PHASE 1, 2, 3.3, 3.4 & 3.5 COMPLETE — Engine live; source × persona routing now correct; cooldown enforced; templates via Supabase.
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -24,6 +24,7 @@
 | **Phase 2 — Admin Control** | **5** | **5** | **0** | **0** |
 | **Phase 3.3 — Analytics & Bug Fixes** | **11** | **11** | **0** | **0** |
 | **Phase 3.4 — Templates Architecture** | **6** | **6** | **0** | **0** |
+| **Phase 3.5 — Routing & Cooldown Fixes** | **3** | **3** | **0** | **0** |
 | Phase 3 — Next Sprint | 7 | 0 | 0 | 0 |
 | Phase 4 — Future | 5 | 0 | 0 | 0 |
 
@@ -213,6 +214,24 @@
 - [x] **P3.3.10 — Post-deploy: analytics IST timezone** — `formatTime()` used server locale (UTC). Added `timeZone: Asia/Kolkata`.
 - [x] **P3.3.11 — Message Log inbound visibility** — Removed `direction=outbound` filter; inbound replies now shown as separate rows with reply text, indigo styling, and `inbound` pill. `inbound` filter pill added.
 - **Result:** Full E2E confirmed 27 Mar 2026: outbound send → Twilio delivery callback → inbound reply → classify → auto-reply (wa_counsellor_intro). Zoho writeback confirmed firing (token refresh + API call working). All message attempts (including failures) now visible in analytics.
+
+---
+
+## 🟢 PHASE 3.5 — ROUTING & COOLDOWN FIXES (27 March 2026) ✅ COMPLETE
+
+- [x] **P3.5.1 — `lead_source` null fix** (`src/app/api/webhooks/zoho/route.ts`)
+  - Zoho webhook sends `Lead_Source` (API name, underscore) not `Lead Source` (space)
+  - `lead_source` was null for every lead → every lead fell through to `wa_welcome_manual`
+  - Added `data['Lead_Source']` and `data['Ad_Campaign_Name']` underscore variants to field mapping
+  - All new leads will now correctly route to meta/organic/manual templates per source × persona
+  - Note: existing leads with null `lead_source` left as-is in Supabase (not backfilled)
+- [x] **P3.5.2 — Cooldown `sent_at` fix** (`src/lib/engine/dispatcher.ts`)
+  - Cooldown count query used `.gt('created_at', ...)` — column doesn't exist → count always 0
+  - 2-message limit was never enforced since Week 1. Fixed to `sent_at`.
+- [x] **P3.5.3 — Dispatcher double SID resolution fix**
+  - Queue carries already-resolved HX SIDs; dispatcher was calling `getTwilioTemplateSid(HX...)` again → null → last-resort fallback → noisy error log
+  - Now: if `contentSid.startsWith('HX')`, use directly. Only resolve if a friendly name is passed.
+- **Result:** Source × persona routing now works correctly for new leads. Cooldown enforcement live. No more `"Could not resolve ContentSid"` errors in logs.
 
 ---
 
