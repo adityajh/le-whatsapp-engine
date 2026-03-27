@@ -42,13 +42,16 @@ type MsgRow = {
   leads: { name: string | null } | null;
 };
 
+const PAGE_SIZE = 50;
+
 type Props = {
-  searchParams: Promise<{ tab?: string; filter?: string }>;
+  searchParams: Promise<{ tab?: string; filter?: string; q?: string; page?: string }>;
 };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default async function AnalyticsPage({ searchParams }: Props) {
-  const { tab = 'performance', filter = 'all' } = await searchParams;
+  const { tab = 'performance', filter = 'all', q = '', page = '1' } = await searchParams;
+  const currentPage = Math.max(1, parseInt(page) || 1);
 
   // Build SID ↔ name lookup from live Twilio templates (Supabase-persisted)
   const liveTemplates = await getApprovedTemplates().catch(() => []);
@@ -57,37 +60,99 @@ export default async function AnalyticsPage({ searchParams }: Props) {
 
   // ── TAB 2: MESSAGE LOG ────────────────────────────────────────────────────
   if (tab === 'messages') {
-    let query = supabase
-      .from('messages')
-      .select('id, direction, phone_normalised, template_id, template_variant_id, content, status, error_code, sent_at, delivered_at, read_at, leads!lead_id(name)')
-      .order('sent_at', { ascending: false })
-      .limit(200);
+    const offset = (currentPage - 1) * PAGE_SIZE;
 
-    if (filter === 'inbound') {
-      query = query.eq('direction', 'inbound');
-    } else if (filter !== 'all') {
-      query = query.eq('direction', 'outbound').eq('status', filter);
+    // If searching, pre-fetch matching lead IDs by name
+    let matchingLeadIds: string[] = [];
+    if (q) {
+      const { data: matchedLeads } = await supabase
+        .from('leads')
+        .select('id')
+        .ilike('name', `%${q}%`);
+      matchingLeadIds = (matchedLeads || []).map((l) => l.id);
     }
 
-    const { data, error } = await query;
+    // Build base query
+    const applyFilters = (qb: any) => {
+      if (filter === 'inbound') {
+        qb = qb.eq('direction', 'inbound');
+      } else if (filter !== 'all') {
+        qb = qb.eq('direction', 'outbound').eq('status', filter);
+      }
+      if (q) {
+        const orParts = [`phone_normalised.ilike.%${q}%`, `template_id.ilike.%${q}%`];
+        if (matchingLeadIds.length > 0) {
+          orParts.push(`lead_id.in.(${matchingLeadIds.join(',')})`);
+        }
+        qb = qb.or(orParts.join(','));
+      }
+      return qb;
+    };
+
+    // Count query
+    const { count: totalCount } = await applyFilters(
+      supabase.from('messages').select('*', { count: 'exact', head: true })
+    );
+
+    // Data query
+    const { data, error } = await applyFilters(
+      supabase
+        .from('messages')
+        .select('id, direction, phone_normalised, template_id, template_variant_id, content, status, error_code, sent_at, delivered_at, read_at, leads!lead_id(name)')
+        .order('sent_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
+    );
+
     if (error) {
       return <div className="p-8 text-red-600">Error loading messages: {error.message}</div>;
     }
 
     const rows = (data || []) as unknown as MsgRow[];
-    const failedCount  = rows.filter((r) => r.direction === 'outbound' && r.status === 'failed').length;
-    const inboundCount = rows.filter((r) => r.direction === 'inbound').length;
+    const total = totalCount ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+    // Build URL helper preserving all params
+    const msgUrl = (overrides: Record<string, string>) => {
+      const params = new URLSearchParams({ tab: 'messages', filter, ...(q ? { q } : {}), page: String(currentPage), ...overrides });
+      return `/admin/analytics?${params.toString()}`;
+    };
 
     return (
       <div className="p-8 max-w-7xl mx-auto space-y-6">
         <PageHeader tab={tab} />
+
+        {/* Search bar */}
+        <form method="GET" action="/admin/analytics" className="flex gap-2">
+          <input type="hidden" name="tab" value="messages" />
+          <input type="hidden" name="filter" value={filter} />
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Search by name, phone, or template…"
+            className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700"
+          >
+            Search
+          </button>
+          {q && (
+            <Link
+              href={msgUrl({ q: '', page: '1' })}
+              className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg text-gray-500 hover:border-gray-400"
+            >
+              Clear
+            </Link>
+          )}
+        </form>
 
         {/* Filter bar */}
         <div className="flex flex-wrap gap-2 items-center">
           {(['all', 'inbound', 'failed', 'delivered', 'read', 'sent'] as const).map((f) => (
             <Link
               key={f}
-              href={`/admin/analytics?tab=messages&filter=${f}`}
+              href={msgUrl({ filter: f, page: '1' })}
               className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 filter === f
                   ? 'bg-gray-900 text-white border-gray-900'
@@ -95,16 +160,10 @@ export default async function AnalyticsPage({ searchParams }: Props) {
               }`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
-              {f === 'failed' && failedCount > 0 && filter !== 'failed' && (
-                <span className="ml-1 text-red-400">({failedCount})</span>
-              )}
-              {f === 'inbound' && inboundCount > 0 && filter !== 'inbound' && (
-                <span className="ml-1 text-indigo-400">({inboundCount})</span>
-              )}
             </Link>
           ))}
           <span className="ml-auto text-sm text-gray-400">
-            Showing {rows.length} most recent
+            {total} message{total !== 1 ? 's' : ''}{q ? ` matching "${q}"` : ''}
           </span>
         </div>
 
@@ -186,13 +245,42 @@ export default async function AnalyticsPage({ searchParams }: Props) {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-gray-400">
-                    No messages found{filter !== 'all' ? ` with filter "${filter}"` : ''}.
+                    No messages found{q ? ` matching "${q}"` : filter !== 'all' ? ` with filter "${filter}"` : ''}.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <Link
+              href={msgUrl({ page: String(currentPage - 1) })}
+              className={`px-4 py-2 text-sm font-medium border rounded-lg transition-colors ${
+                currentPage <= 1
+                  ? 'text-gray-300 border-gray-100 pointer-events-none'
+                  : 'text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              ← Prev
+            </Link>
+            <span className="text-sm text-gray-500">
+              Page {currentPage} of {totalPages} · {total} total
+            </span>
+            <Link
+              href={msgUrl({ page: String(currentPage + 1) })}
+              className={`px-4 py-2 text-sm font-medium border rounded-lg transition-colors ${
+                currentPage >= totalPages
+                  ? 'text-gray-300 border-gray-100 pointer-events-none'
+                  : 'text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              Next →
+            </Link>
+          </div>
+        )}
 
         <ErrorLegend />
       </div>
