@@ -207,7 +207,11 @@
 - [x] **P3.3.5 — Inbound webhook URL fix** — Reconstructed from `x-forwarded-proto` + `x-forwarded-host` headers for correct Twilio signature validation in Vercel serverless
 - [x] **P3.3.6 — Twilio console config** — Set inbound webhook URL in Messaging Service → Integration tab (was blank)
 - [x] **P3.3.7 — Backfill script** (`scripts/backfill-messages.ts`) — idempotent fetch from Twilio API to populate historical messages. Confirmed 7 messages inserted.
-- **Result:** Full E2E confirmed 27 Mar 2026: outbound send → Twilio delivery callback → inbound reply → classify → auto-reply (wa_counsellor_intro).
+- [x] **P3.3.8 — Post-deploy: inbound `sender_number` fix** — Messages table has NOT NULL on `sender_number`; inbound inserts were failing with `23502`. Set to `cleanPhone`.
+- [x] **P3.3.9 — Post-deploy: Zoho datetime format fix** — `WA_Last_Inbound_At` rejected by Zoho (`expected_data_type: datetime`). Changed from `Z` suffix to `+00:00` offset.
+- [x] **P3.3.10 — Post-deploy: analytics IST timezone** — `formatTime()` used server locale (UTC). Added `timeZone: Asia/Kolkata`.
+- [x] **P3.3.11 — Message Log inbound visibility** — Removed `direction=outbound` filter; inbound replies now shown as separate rows with reply text, indigo styling, and `inbound` pill. `inbound` filter pill added.
+- **Result:** Full E2E confirmed 27 Mar 2026: outbound send → Twilio delivery callback → inbound reply → classify → auto-reply (wa_counsellor_intro). Zoho writeback confirmed firing (token refresh + API call working). All message attempts (including failures) now visible in analytics.
 
 ---
 
@@ -293,6 +297,9 @@
 | 15 | 27 Mar | Messages table empty since Week 1 — analytics/cooldown/status all broken | Code Agent | ✅ Resolved | Two field name mismatches in `dispatcher.ts`: `body`→`content`, `created_at`→`sent_at`. Silent Supabase failures since launch. |
 | 16 | 27 Mar | Inbound replies never processed — NLP classifier and state machine unreachable | Code Agent + Ops | ✅ Resolved | Three causes: (1) Twilio Messaging Service Integration tab had blank inbound URL — set to production URL. (2) Phone normalisation stripped `+` before E.164 check → no lead found. (3) `lead_events` insert referenced non-existent column. All three fixed. |
 | 17 | 27 Mar | Twilio signature validation blocked inbound in Vercel serverless | Code Agent | ✅ Resolved | `req.url` returns internal Vercel hostname — doesn't match Twilio's signed URL. Fixed by reconstructing from `x-forwarded-proto` + `x-forwarded-host` headers. |
+| 18 | 27 Mar | `sender_number` NOT NULL constraint failing inbound message inserts | Code Agent | ✅ Resolved | `sender_number` not set on inbound inserts → `23502` error. Set to `cleanPhone` for inbound messages. |
+| 19 | 27 Mar | Zoho `WA_Last_Inbound_At` rejected — invalid datetime format | Code Agent | ✅ Resolved | ISO string `...Z` not accepted by Zoho datetime fields. Reformatted to `+00:00` offset. |
+| 20 | 27 Mar | Analytics timestamps displayed in UTC (Vercel server time) | Code Agent | ✅ Resolved | Added `timeZone: Asia/Kolkata` to `formatTime()`. |
 
 ---
 

@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.1] - 2026-03-27 (Post-Deploy Fixes + Inbound Message Log)
+
+### Added
+- **Message Log — inbound replies visible**: Message Log tab now shows both inbound and outbound rows. Inbound rows display reply text (italic), light indigo background, and a purple `inbound` pill. New `inbound` filter pill with count badge. Full conversation timeline visible in `All` view.
+
+### Fixed
+- **`sender_number` NOT NULL constraint**: Inbound message inserts were failing with `23502` — `sender_number` is NOT NULL in schema. Set to `cleanPhone` for inbound messages.
+- **Zoho `WA_Last_Inbound_At` datetime format**: Zoho rejected ISO strings ending in `Z` and milliseconds (e.g. `2026-03-27T06:58:08.442Z`). Now formatted as `+00:00` offset (e.g. `2026-03-27T06:58:08+00:00`).
+- **Dispatcher — failed Twilio attempts now recorded**: If `twilioClient.messages.create()` throws synchronously, a `status: 'failed'` row is now written to the `messages` table before re-throwing. Previously these were invisible in analytics (root cause of Nandini not appearing in Message Log).
+- **Analytics timestamps in IST**: `formatTime()` was using server locale (UTC on Vercel). Added `timeZone: 'Asia/Kolkata'` to both date and time formatters.
+
+---
+
 ## [3.3.0] - 2026-03-27 (Analytics Rewrite + Critical Bug Fixes — Full E2E Confirmed)
 
 ### Added

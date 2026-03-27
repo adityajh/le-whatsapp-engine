@@ -3,7 +3,7 @@
 **Production-ready WhatsApp lead engagement engine** connecting Zoho CRM ↔ Twilio WhatsApp ↔ Supabase, with automated message classification, SLA tracking, campaign management, a visual Logic Builder, and a full source×persona routing rule set.
 
 **Live URL:** [https://le-whatsapp-engine.vercel.app/admin](https://le-whatsapp-engine.vercel.app/admin)
-**Version:** 3.3.0 | **Status:** ✅ Phase 1, 2 & 3.3 Complete — Engine live, full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classification → auto-reply)
+**Version:** 3.3.1 | **Status:** ✅ Phase 1, 2 & 3.3 Complete — Engine live, full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classification → auto-reply)
 
 ---
 
@@ -95,7 +95,7 @@ Zoho CRM ──webhook──► /api/webhooks/zoho
 | **Campaign Manager** | `/admin/campaigns` | Manage bulk WhatsApp campaigns with per-campaign funnel stats |
 | **Create Campaign** | `/admin/campaigns/create` | Segment leads and launch batch sends |
 | **Reply Classification** | `/admin/classification` | Edit keywords per reply class — no deploy needed |
-| **Template Analytics** | `/admin/analytics` | 2-tab: Template Performance (delivery %, reply %, top error code) + Message Log (per-message status, lead, error, timestamps) |
+| **Template Analytics** | `/admin/analytics` | 2-tab: Template Performance (delivery %, reply %, top error code) + Message Log (inbound + outbound, reply content, IST timestamps, filter by status/direction) |
 | **WhatsApp Templates** | `/admin/templates` | Live Twilio template list with approval status and manual Refresh |
 | **Zoho Field Mapping** | `/admin/zoho-mapping` | Internal key ↔ Zoho merge tag reference table + recommended JSON for Zoho webhook setup |
 
