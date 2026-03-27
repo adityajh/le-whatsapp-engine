@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 import { getApprovedTemplates } from '@/lib/twilio/templates';
-import { TEMPLATE_SIDS } from '@/lib/constants';
 import Link from 'next/link';
 
 export const revalidate = 0;
@@ -51,16 +50,10 @@ type Props = {
 export default async function AnalyticsPage({ searchParams }: Props) {
   const { tab = 'performance', filter = 'all' } = await searchParams;
 
-  // Build SID ↔ name lookup from constants + live Twilio
+  // Build SID ↔ name lookup from live Twilio templates (Supabase-persisted)
   const liveTemplates = await getApprovedTemplates().catch(() => []);
-  const SID_TO_NAME: Record<string, string> = {
-    ...Object.fromEntries(Object.entries(TEMPLATE_SIDS).map(([name, sid]) => [sid, name])),
-    ...Object.fromEntries(liveTemplates.map((t) => [t.sid, t.name])),
-  };
-  const NAME_TO_SID: Record<string, string> = {
-    ...TEMPLATE_SIDS,
-    ...Object.fromEntries(liveTemplates.map((t) => [t.name, t.sid])),
-  };
+  const SID_TO_NAME: Record<string, string> = Object.fromEntries(liveTemplates.map((t) => [t.sid, t.name]));
+  const NAME_TO_SID: Record<string, string> = Object.fromEntries(liveTemplates.map((t) => [t.name, t.sid]));
 
   // ── TAB 2: MESSAGE LOG ────────────────────────────────────────────────────
   if (tab === 'messages') {
