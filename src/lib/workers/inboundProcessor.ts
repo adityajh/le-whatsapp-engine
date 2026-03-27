@@ -31,9 +31,13 @@ const TRACK_BUTTONS: Record<string, string> = {
 export async function processInboundMessage(job: { data: Record<string, string> }) {
   const { MessageSid, From, Body, ButtonPayload } = job.data;
 
-  // Normalise phone
-  const phone = (From || '').replace('whatsapp:', '');
-  const cleanPhone = phone.startsWith('+91') ? phone : (phone.length === 10 ? `+91${phone}` : phone);
+  // Normalise phone — handles +91..., 91..., and bare 10-digit formats
+  const rawPhone = (From || '').replace('whatsapp:', '').replace(/\D/g, '');
+  const cleanPhone = rawPhone.startsWith('91') && rawPhone.length === 12
+    ? `+${rawPhone}`
+    : rawPhone.length === 10
+      ? `+91${rawPhone}`
+      : `+${rawPhone}`;
 
   const now = new Date().toISOString();
 
@@ -124,12 +128,13 @@ export async function processInboundMessage(job: { data: Record<string, string> 
 
   // ── Save inbound message (idempotent) ─────────────────────────────────────
   const { error: msgError } = await supabase.from('messages').insert({
+    lead_id:          lead?.id ?? currentLead?.id ?? null,
     twilio_sid:       MessageSid,
     phone_normalised: cleanPhone,
     direction:        'inbound',
-    body:             Body,
+    content:          Body,
     status:           'received',
-    created_at:       now,
+    sent_at:          now,
   });
 
   if (msgError && msgError.code !== '23505') {
@@ -139,12 +144,11 @@ export async function processInboundMessage(job: { data: Record<string, string> 
   // ── Log to lead_events ────────────────────────────────────────────────────
   const eventType = ButtonPayload ? 'button_tap' : 'free_text_reply';
   await supabase.from('lead_events').insert({
-    phone_normalised: cleanPhone,
-    event_type:       eventType,
-    payload:          ButtonPayload
+    lead_id:    lead?.id ?? currentLead?.id ?? null,
+    event_type: eventType,
+    payload:    ButtonPayload
       ? { buttonPayload: ButtonPayload, classification: replyClass }
       : { body: Body, classification: replyClass },
-    created_at: now,
   }).then(({ error }) => {
     if (error) console.warn(`[InboundProcessor] lead_events insert failed:`, error.message);
   });
