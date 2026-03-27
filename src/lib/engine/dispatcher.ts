@@ -111,12 +111,12 @@ export async function dispatchMessage(opts: DispatchOptions) {
           twilio_sid:          message.sid,
           phone_normalised:    opts.to,
           direction:           'outbound',
-          body:                message.body,
+          content:             message.body,
           status:              'sent',
           template_id:         opts.templateName, // The symbolic name (e.g. wa_welcome_meta)
           template_variant_id: messageParams.contentSid, // The actual HX... SID
           sender_number:       opts.from || config.TWILIO_MESSAGING_SERVICE_SID || 'system',
-          created_at:          new Date().toISOString(),
+          sent_at:             new Date().toISOString(),
         });
 
         // 5. Update lead's last-contact markers for analytics & state tracking
