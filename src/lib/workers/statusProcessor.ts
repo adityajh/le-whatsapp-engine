@@ -4,13 +4,19 @@ import { supabase } from '@/lib/supabase';
 export async function processStatusUpdate(job: Job) {
   const { MessageSid, MessageStatus, ErrorCode } = job.data;
   
-  // 1. Update message status
+  // Normalise status — Twilio uses 'undelivered' for async failures (e.g. 63049),
+  // but we store 'failed' for consistency with our schema and analytics.
+  const normalisedStatus = MessageStatus === 'undelivered' ? 'failed' : MessageStatus;
+  const now = new Date().toISOString();
+
+  // 1. Update message status + delivery timestamps
   await supabase
     .from('messages')
-    .update({ 
-      status: MessageStatus,
-      // Store ErrorCode as JSON if it's a string mapped differently, or cast if text field
-      ...(ErrorCode ? { error_code: ErrorCode } : {})
+    .update({
+      status:       normalisedStatus,
+      ...(ErrorCode              ? { error_code:    ErrorCode } : {}),
+      ...(normalisedStatus === 'delivered' ? { delivered_at: now }      : {}),
+      ...(normalisedStatus === 'read'      ? { delivered_at: now, read_at: now } : {}),
     })
     .eq('twilio_sid', MessageSid);
 
@@ -26,7 +32,7 @@ export async function processStatusUpdate(job: Job) {
     return { success: true, status: MessageStatus, leadSynced: false };
   }
 
-  const updateObj: Record<string, string | boolean> = { wa_last_status: MessageStatus };
+  const updateObj: Record<string, string | boolean> = { wa_last_status: normalisedStatus };
   
   // 3. Twilio Error codes handling & Compliance
   if (ErrorCode === '63032') { // User Opted Out / STOP
