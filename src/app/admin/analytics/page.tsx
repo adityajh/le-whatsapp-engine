@@ -30,9 +30,11 @@ type TemplateStats = {
 
 type MsgRow = {
   id: string;
+  direction: string | null;
   phone_normalised: string | null;
   template_id: string | null;
   template_variant_id: string | null;
+  content: string | null;
   status: string | null;
   error_code: string | null;
   sent_at: string | null;
@@ -64,13 +66,14 @@ export default async function AnalyticsPage({ searchParams }: Props) {
   if (tab === 'messages') {
     let query = supabase
       .from('messages')
-      .select('id, phone_normalised, template_id, template_variant_id, status, error_code, sent_at, delivered_at, read_at, leads!lead_id(name)')
-      .eq('direction', 'outbound')
+      .select('id, direction, phone_normalised, template_id, template_variant_id, content, status, error_code, sent_at, delivered_at, read_at, leads!lead_id(name)')
       .order('sent_at', { ascending: false })
       .limit(200);
 
-    if (filter !== 'all') {
-      query = query.eq('status', filter);
+    if (filter === 'inbound') {
+      query = query.eq('direction', 'inbound');
+    } else if (filter !== 'all') {
+      query = query.eq('direction', 'outbound').eq('status', filter);
     }
 
     const { data, error } = await query;
@@ -79,7 +82,8 @@ export default async function AnalyticsPage({ searchParams }: Props) {
     }
 
     const rows = (data || []) as unknown as MsgRow[];
-    const failedCount  = rows.filter((r) => r.status === 'failed').length;
+    const failedCount  = rows.filter((r) => r.direction === 'outbound' && r.status === 'failed').length;
+    const inboundCount = rows.filter((r) => r.direction === 'inbound').length;
 
     return (
       <div className="p-8 max-w-7xl mx-auto space-y-6">
@@ -87,7 +91,7 @@ export default async function AnalyticsPage({ searchParams }: Props) {
 
         {/* Filter bar */}
         <div className="flex flex-wrap gap-2 items-center">
-          {(['all', 'failed', 'delivered', 'read', 'sent'] as const).map((f) => (
+          {(['all', 'inbound', 'failed', 'delivered', 'read', 'sent'] as const).map((f) => (
             <Link
               key={f}
               href={`/admin/analytics?tab=messages&filter=${f}`}
@@ -100,6 +104,9 @@ export default async function AnalyticsPage({ searchParams }: Props) {
               {f.charAt(0).toUpperCase() + f.slice(1)}
               {f === 'failed' && failedCount > 0 && filter !== 'failed' && (
                 <span className="ml-1 text-red-400">({failedCount})</span>
+              )}
+              {f === 'inbound' && inboundCount > 0 && filter !== 'inbound' && (
+                <span className="ml-1 text-indigo-400">({inboundCount})</span>
               )}
             </Link>
           ))}
@@ -114,67 +121,79 @@ export default async function AnalyticsPage({ searchParams }: Props) {
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Lead</th>
-                <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Template</th>
+                <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Template / Message</th>
                 <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
                 <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Error</th>
-                <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Sent</th>
+                <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Time</th>
                 <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Delivered</th>
                 <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Read</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b hover:bg-gray-50/50">
-                  <td className="p-3">
-                    <div className="font-medium text-gray-900">{row.leads?.name || '—'}</div>
-                    <div className="text-xs text-gray-400 font-mono">
-                      {row.phone_normalised
-                        ? row.phone_normalised.slice(0, 6) + '••••' + row.phone_normalised.slice(-4)
-                        : '—'}
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <div className="text-gray-800">
-                      {row.template_id ||
-                        SID_TO_NAME[row.template_variant_id || ''] ||
-                        '—'}
-                    </div>
-                    {row.template_variant_id && (
+              {rows.map((row) => {
+                const isInbound = row.direction === 'inbound';
+                return (
+                  <tr key={row.id} className={`border-b hover:bg-gray-50/50 ${isInbound ? 'bg-indigo-50/30' : ''}`}>
+                    <td className="p-3">
+                      <div className="font-medium text-gray-900">{row.leads?.name || '—'}</div>
                       <div className="text-xs text-gray-400 font-mono">
-                        {row.template_variant_id.slice(0, 14)}…
+                        {row.phone_normalised
+                          ? row.phone_normalised.slice(0, 6) + '••••' + row.phone_normalised.slice(-4)
+                          : '—'}
                       </div>
-                    )}
-                  </td>
-                  <td className="p-3">
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td className="p-3">
-                    {row.error_code ? (
-                      <span className="text-xs text-orange-600 font-medium">
-                        {row.error_code}
-                        <span className="text-orange-400 font-normal">
-                          {' '}— {ERROR_LABELS[row.error_code] ?? 'Unknown'}
+                    </td>
+                    <td className="p-3 max-w-[260px]">
+                      {isInbound ? (
+                        <div className="text-gray-700 text-sm italic truncate" title={row.content ?? ''}>
+                          {row.content || '—'}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-gray-800">
+                            {row.template_id || SID_TO_NAME[row.template_variant_id || ''] || '—'}
+                          </div>
+                          {row.template_variant_id && (
+                            <div className="text-xs text-gray-400 font-mono">
+                              {row.template_variant_id.slice(0, 14)}…
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      {isInbound
+                        ? <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700">inbound</span>
+                        : <StatusBadge status={row.status} />
+                      }
+                    </td>
+                    <td className="p-3">
+                      {row.error_code ? (
+                        <span className="text-xs text-orange-600 font-medium">
+                          {row.error_code}
+                          <span className="text-orange-400 font-normal">
+                            {' '}— {ERROR_LABELS[row.error_code] ?? 'Unknown'}
+                          </span>
                         </span>
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
-                    {row.sent_at ? formatTime(row.sent_at) : '—'}
-                  </td>
-                  <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
-                    {row.delivered_at ? formatTime(row.delivered_at) : '—'}
-                  </td>
-                  <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
-                    {row.read_at ? formatTime(row.read_at) : '—'}
-                  </td>
-                </tr>
-              ))}
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
+                      {row.sent_at ? formatTime(row.sent_at) : '—'}
+                    </td>
+                    <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
+                      {row.delivered_at ? formatTime(row.delivered_at) : '—'}
+                    </td>
+                    <td className="p-3 text-gray-500 text-xs whitespace-nowrap">
+                      {row.read_at ? formatTime(row.read_at) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-gray-400">
-                    No messages found{filter !== 'all' ? ` with status "${filter}"` : ''}.
+                    No messages found{filter !== 'all' ? ` with filter "${filter}"` : ''}.
                   </td>
                 </tr>
               )}
