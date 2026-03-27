@@ -135,9 +135,9 @@ export default async function AnalyticsPage({ searchParams }: Props) {
                           : '—'}
                       </div>
                     </td>
-                    <td className="p-3 max-w-[260px]">
+                    <td className="p-3 max-w-xs">
                       {isInbound ? (
-                        <div className="text-gray-700 text-sm italic truncate" title={row.content ?? ''}>
+                        <div className="text-gray-700 text-sm italic whitespace-pre-wrap break-words">
                           {row.content || '—'}
                         </div>
                       ) : (
