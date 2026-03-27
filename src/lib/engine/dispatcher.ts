@@ -40,7 +40,7 @@ export async function dispatchMessage(opts: DispatchOptions) {
       .select('*', { count: 'exact', head: true })
       .eq('phone_normalised', opts.to)
       .eq('direction', 'outbound')
-      .gt('created_at', inDate);
+      .gt('sent_at', inDate);
 
     if (count && count >= 2) {
       console.warn(`[Cooldown Enforcement] Dropping message to ${opts.to}. Exceeded 2 outbound messages without a reply.`);
@@ -65,18 +65,15 @@ export async function dispatchMessage(opts: DispatchOptions) {
     }
 
     if (opts.contentSid) {
-      // Resolve symbolic names or resolve if empty/placeholder
-      const resolvedSid = await getTwilioTemplateSid(opts.contentSid);
-      
-      if (!resolvedSid || !resolvedSid.startsWith('HX')) {
-        console.error(`[Dispatcher] Could not resolve a valid ContentSid for "${opts.contentSid}". Found: "${resolvedSid}"`);
-        // If it's already an HX sid, let it through as a last resort, otherwise fail early
-        if (opts.contentSid.startsWith('HX')) {
-          messageParams.contentSid = opts.contentSid;
-        } else {
-          return null; 
-        }
+      // If already a resolved HX SID, use directly. Otherwise resolve from name via Supabase/Twilio.
+      if (opts.contentSid.startsWith('HX')) {
+        messageParams.contentSid = opts.contentSid;
       } else {
+        const resolvedSid = await getTwilioTemplateSid(opts.contentSid);
+        if (!resolvedSid) {
+          console.error(`[Dispatcher] Could not resolve ContentSid for template name "${opts.contentSid}". Skipping.`);
+          return null;
+        }
         messageParams.contentSid = resolvedSid;
       }
       // Always send contentVariables if using contentSid, with a fallback
