@@ -3,7 +3,7 @@
 **Production-ready WhatsApp lead engagement engine** connecting Zoho CRM ↔ Twilio WhatsApp ↔ Supabase, with automated message classification, SLA tracking, campaign management, a visual Logic Builder, and a full source×persona routing rule set.
 
 **Live URL:** [https://le-whatsapp-engine.vercel.app/admin](https://le-whatsapp-engine.vercel.app/admin)
-**Version:** 3.3.1 | **Status:** ✅ Phase 1, 2 & 3.3 Complete — Engine live, full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classification → auto-reply)
+**Version:** 3.3.2 | **Status:** ✅ Phase 1, 2, 3.3 & 3.4 Complete — Engine live, full E2E confirmed 27 Mar 2026. Templates single source of truth via Supabase.
 
 ---
 

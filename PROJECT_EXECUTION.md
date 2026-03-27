@@ -2,7 +2,7 @@
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
 **Last Updated:** 27 March 2026
-**Status:** 🟢 PHASE 1, 2 & 3.3 COMPLETE — Engine live; full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classify → auto-reply).
+**Status:** 🟢 PHASE 1, 2, 3.3 & 3.4 COMPLETE — Engine live; full E2E confirmed 27 Mar 2026. Templates architecture refactored — single source of truth via Supabase.
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -22,7 +22,8 @@
 | Week 4 — Optimisation | 10 | 7 | 0 | 0 |
 | **Phase 1 — Rules Engine v3** | **10** | **9** | **0** | **1** |
 | **Phase 2 — Admin Control** | **5** | **5** | **0** | **0** |
-| **Phase 3.3 — Analytics & Bug Fixes** | **7** | **7** | **0** | **0** |
+| **Phase 3.3 — Analytics & Bug Fixes** | **11** | **11** | **0** | **0** |
+| **Phase 3.4 — Templates Architecture** | **6** | **6** | **0** | **0** |
 | Phase 3 — Next Sprint | 7 | 0 | 0 | 0 |
 | Phase 4 — Future | 5 | 0 | 0 | 0 |
 
@@ -212,6 +213,23 @@
 - [x] **P3.3.10 — Post-deploy: analytics IST timezone** — `formatTime()` used server locale (UTC). Added `timeZone: Asia/Kolkata`.
 - [x] **P3.3.11 — Message Log inbound visibility** — Removed `direction=outbound` filter; inbound replies now shown as separate rows with reply text, indigo styling, and `inbound` pill. `inbound` filter pill added.
 - **Result:** Full E2E confirmed 27 Mar 2026: outbound send → Twilio delivery callback → inbound reply → classify → auto-reply (wa_counsellor_intro). Zoho writeback confirmed firing (token refresh + API call working). All message attempts (including failures) now visible in analytics.
+
+---
+
+## 🟢 PHASE 3.4 — TEMPLATES ARCHITECTURE (27 March 2026) ✅ COMPLETE
+
+- [x] **P3.4.1 — Supabase `templates` table** (`20260327_templates_table.sql`)
+  - Columns: `sid` (PK), `name` (UNIQUE), `status`, `body`, `fetched_at`, `updated_at`
+  - Indexes: `idx_templates_name`, `idx_templates_status`
+  - Survives Redis flushes; single persistent store for all template metadata
+- [x] **P3.4.2 — `syncTemplatesToSupabase()`** in `src/lib/twilio/templates.ts`
+  - Fetches from Twilio Content API → upserts Supabase → populates Redis (1hr TTL)
+  - Resolution chain: Redis → Supabase → live Twilio (in that order)
+- [x] **P3.4.3 — Refresh route updated** — `/api/admin/templates/refresh` now calls `syncTemplatesToSupabase()` so the Refresh button in `/admin/templates` writes through to Supabase
+- [x] **P3.4.4 — `constants.ts` SIDs stripped** — `TEMPLATE_SIDS = {}`. Was short-circuiting `getTwilioTemplateSid()` with stale/wrong hardcoded values. Added `KNOWN_TEMPLATES` list for routing/UI reference.
+- [x] **P3.4.5 — Analytics SID↔name maps** — Removed `TEMPLATE_SIDS` import; maps now built purely from `getApprovedTemplates()` (Supabase-backed)
+- [x] **P3.4.6 — Message Log text wrapping** — Template/Message column was truncating; now uses `whitespace-pre-wrap break-words`
+- **Result:** Single source of truth for templates established. All SID resolution goes through Supabase → Redis → Twilio. No hardcoded SIDs anywhere in codebase.
 
 ---
 

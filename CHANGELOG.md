@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.2] - 2026-03-27 (Templates Single Source of Truth)
+
+### Added
+- **`templates` Supabase table** (`20260327_templates_table.sql`) — persistent store for Twilio templates (`sid`, `name`, `status`, `body`, `fetched_at`, `updated_at`). Survives Redis flushes.
+- **`syncTemplatesToSupabase()`** in `templates.ts` — fetches from Twilio Content API, upserts into Supabase, then repopulates Redis with 1hr TTL.
+- **`KNOWN_TEMPLATES` list** in `constants.ts` — friendly name list for routing/UI. Replaces the hardcoded SID map.
+
+### Changed
+- **`getTwilioTemplateSid()`** — now resolves via Redis → Supabase → Twilio chain. Never reads from `constants.ts`. All SID lookups go through live data only.
+- **`/api/admin/templates/refresh`** — calls `syncTemplatesToSupabase()` so Refresh button persists to Supabase, not just Redis.
+- **`constants.ts`** — `TEMPLATE_SIDS` is now `{}` (all hardcoded SIDs removed). Was the root cause of stale/wrong SIDs overriding Twilio.
+- **Analytics page** — removed `TEMPLATE_SIDS` import; `SID_TO_NAME` and `NAME_TO_SID` maps built purely from `getApprovedTemplates()` (Supabase-backed).
+- **Message Log — text wrapping** — Template/Message column now wraps (`whitespace-pre-wrap break-words`) instead of truncating.
+
+---
+
 ## [3.3.1] - 2026-03-27 (Post-Deploy Fixes + Inbound Message Log)
 
 ### Added
