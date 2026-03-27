@@ -90,21 +90,50 @@ export async function dispatchMessage(opts: DispatchOptions) {
 
     console.log('[Twilio] messageParams:', JSON.stringify(messageParams, null, 2));
 
-    const message = await twilioClient.messages.create(messageParams);
-    
+    // Resolve lead ID once — used in both success and failure paths
+    let finalLeadId = opts.leadId;
+    if (!finalLeadId) {
+      const { data: leadRow } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('phone_normalised', opts.to)
+        .single();
+      finalLeadId = leadRow?.id;
+    }
+
+    let message: Awaited<ReturnType<typeof twilioClient.messages.create>>;
+    try {
+      message = await twilioClient.messages.create(messageParams);
+    } catch (err: any) {
+      console.error(`[Dispatcher] Failed to dispatch message to ${opts.to}:`, {
+        message: err.message,
+        code: err.code,
+        moreInfo: err.moreInfo,
+        status: err.status,
+      });
+      // Record the failed attempt so it appears in analytics
+      if (finalLeadId) {
+        await supabase.from('messages').insert({
+          lead_id:             finalLeadId,
+          phone_normalised:    opts.to,
+          direction:           'outbound',
+          content:             null,
+          status:              'failed',
+          error_code:          String(err.code ?? err.status ?? 'unknown'),
+          template_id:         opts.templateName,
+          template_variant_id: messageParams.contentSid,
+          sender_number:       opts.from || config.TWILIO_MESSAGING_SERVICE_SID || 'system',
+          sent_at:             new Date().toISOString(),
+        }).then(({ error: dbErr }) => {
+          if (dbErr) console.warn('[Dispatcher] Could not record failed attempt:', dbErr.message);
+        });
+      }
+      throw err;
+    }
+
     // 4. Record outbound message in Supabase (Immutable Log)
     // Analytics depends on 'direction' = 'outbound' and 'template_variant_id' being set
     try {
-      let finalLeadId = opts.leadId;
-      if (!finalLeadId) {
-        const { data: lead } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('phone_normalised', opts.to)
-          .single();
-        finalLeadId = lead?.id;
-      }
-
       if (finalLeadId) {
         await supabase.from('messages').insert({
           lead_id:             finalLeadId,
@@ -138,12 +167,7 @@ export async function dispatchMessage(opts: DispatchOptions) {
     console.log(`[Dispatcher] Successfully queued message SID: ${message.sid} to ${opts.to}`);
     return message;
   } catch (err: any) {
-    console.error(`[Dispatcher] Failed to dispatch message to ${opts.to}:`, {
-      message: err.message,
-      code: err.code,
-      moreInfo: err.moreInfo,
-      status: err.status,
-    });
+    // Re-throw — already logged above in the Twilio failure path
     throw err;
   }
 }

@@ -5,6 +5,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.0] - 2026-03-27 (Analytics Rewrite + Critical Bug Fixes — Full E2E Confirmed)
+
+### Added
+- **Analytics page — 2-tab layout** (`/admin/analytics`):
+  - **Tab 1 (Template Performance):** enhanced with `error_code` column — shows most common Meta rejection code per template (63049, 63032, etc.) with plain-English labels. Delivery % and reply % preserved.
+  - **Tab 2 (Message Log):** per-message visibility — lead name + masked phone, status badge (colour-coded), error code + label, sent/delivered/read timestamps, filter pills (all/failed/delivered/read/sent). Limit 200, joins `messages → leads` via FK. Tab selection via URL param (`?tab=messages`).
+  - `ERROR_LABELS` map covering: 63049 (Meta marketing rejected), 63032 (opted out), 21211 (invalid number), 63016 (template not approved), 63033 (account suspended), 30008 (carrier filtering), 63003 (not a WhatsApp user).
+- **`supabase/migrations/20260327_messages_error_code.sql`** — adds `error_code VARCHAR(20)` and `phone_normalised VARCHAR(20)` to `messages` table. Also adds performance indexes: `idx_messages_status`, `idx_messages_phone`, `idx_messages_sent_at`.
+- **Backfill script** (`scripts/backfill-messages.ts`) — fetches today's outbound WhatsApp messages from Twilio API, matches to leads by `phone_normalised`, inserts into `messages` table (idempotent). Note: `template_variant_id` is null on backfilled rows (not available from Twilio list endpoint). Run with: `export $(cat .env.local | grep -v '^#' | xargs) && npx tsx scripts/backfill-messages.ts`.
+
+### Fixed
+- **CRITICAL — Messages table was empty since Week 1** (`src/lib/engine/dispatcher.ts`):
+  - `body: message.body` → `content: message.body` (schema column is `content`, not `body`)
+  - `created_at: new Date().toISOString()` → `sent_at: new Date().toISOString()` (schema column is `sent_at`, not `created_at`)
+  - Root cause: these two field name mismatches caused every outbound message insert to fail silently. Analytics, cooldown enforcement, and status tracking were all broken as a result.
+- **CRITICAL — Inbound replies never processed** (three cascading issues resolved):
+  1. **Twilio Messaging Service config**: Inbound webhook URL was blank in Twilio Console → Messaging Services → Integration tab. Set to `https://le-whatsapp-engine.vercel.app/api/webhooks/twilio/inbound`.
+  2. **Phone normalisation** (`src/lib/workers/inboundProcessor.ts`): Strip all non-digits first (`replace(/\D/g, '')`), then check 12-digit `91xxx` format before 10-digit. Fixes lookup failure for numbers without `+` prefix.
+  3. **`lead_events` insert**: Removed non-existent `phone_normalised` column; added `lead_id`. Insert was silently failing for every inbound message.
+- **Inbound message insert** (`src/lib/workers/inboundProcessor.ts`): `body` → `content`, `created_at` → `sent_at`, added `lead_id` and `phone_normalised` fields. Previously inbound messages were never saved.
+- **Twilio signature validation** (`src/app/api/webhooks/twilio/inbound/route.ts`): `req.url` in Vercel serverless doesn't match Twilio's signed URL. Reconstructed from `x-forwarded-proto` + `x-forwarded-host` headers to match exactly what Twilio signed.
+- **Cooldown enforcement** (was never working): `dispatcher.ts` queried `messages.phone_normalised` which didn't exist until this migration → count was always 0 → 2-message limit was never enforced. Fixed by adding the column.
+- **Status processor lead updates** (was silently failing): `statusProcessor` tried to `select('phone_normalised')` from `messages` — column didn't exist → returned null → lead state was never updated from Twilio delivery callbacks. Fixed by adding the column.
+
+### Changed
+- **Next.js 16 `searchParams`**: Analytics page uses `searchParams: Promise<{...}>` (awaited in props) — required by Next.js 16 App Router server components.
+
+---
+
 ## [3.2.0] - 2026-03-27 (Phase 2 — Admin Control & Visibility)
 
 ### Added

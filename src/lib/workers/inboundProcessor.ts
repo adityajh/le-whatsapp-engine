@@ -134,6 +134,7 @@ export async function processInboundMessage(job: { data: Record<string, string> 
     direction:        'inbound',
     content:          Body,
     status:           'received',
+    sender_number:    cleanPhone,
     sent_at:          now,
   });
 
@@ -194,7 +195,7 @@ export async function processInboundMessage(job: { data: Record<string, string> 
     const zohoUpdate: any = {
       WA_Reply_Class:    replyClass,
       WA_Hotness:        hotness,
-      WA_Last_Inbound_At: now,
+      WA_Last_Inbound_At: now.replace(/\.\d{3}Z$/, '+00:00'),
       WA_Opt_In:         waOptIn,
     };
 

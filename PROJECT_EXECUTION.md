@@ -2,7 +2,7 @@
 **Project:** ZOHO + Twilio WhatsApp Lead Engagement Engine
 **Started:** 23 March 2026
 **Last Updated:** 27 March 2026
-**Status:** 🟢 PHASE 1 & PHASE 2 COMPLETE — Engine live; E2E delivery confirmed 27 Mar 2026.
+**Status:** 🟢 PHASE 1, 2 & 3.3 COMPLETE — Engine live; full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classify → auto-reply).
 
 > **How to use this file**
 > - Mark tasks `[x]` when done, `[~]` when in progress, `[!]` when blocked
@@ -22,6 +22,7 @@
 | Week 4 — Optimisation | 10 | 7 | 0 | 0 |
 | **Phase 1 — Rules Engine v3** | **10** | **9** | **0** | **1** |
 | **Phase 2 — Admin Control** | **5** | **5** | **0** | **0** |
+| **Phase 3.3 — Analytics & Bug Fixes** | **7** | **7** | **0** | **0** |
 | Phase 3 — Next Sprint | 7 | 0 | 0 | 0 |
 | Phase 4 — Future | 5 | 0 | 0 | 0 |
 
@@ -187,6 +188,29 @@
 
 ---
 
+## 🟢 PHASE 3.3 — ANALYTICS & BUG FIXES (27 March 2026) ✅ COMPLETE
+
+- [x] **P3.3.1 — Analytics page 2-tab rewrite** (`/admin/analytics`)
+  - Tab 1 (Template Performance): added `error_code` column, `topError` per template, plain-English error labels
+  - Tab 2 (Message Log): per-message log with lead name + masked phone, status badge, error code, timestamps, filter pills
+  - Next.js 16: `searchParams` awaited as Promise in server component props
+- [x] **P3.3.2 — Messages table migration** (`20260327_messages_error_code.sql`)
+  - Added `error_code VARCHAR(20)` and `phone_normalised VARCHAR(20)` columns
+  - Added performance indexes: `idx_messages_status`, `idx_messages_phone`, `idx_messages_sent_at`
+- [x] **P3.3.3 — Dispatcher field name fix** (CRITICAL — messages table empty since Week 1)
+  - `body` → `content`, `created_at` → `sent_at` in outbound message insert
+  - Added `phone_normalised` to insert for cooldown enforcement
+- [x] **P3.3.4 — Inbound processor fixes** (CRITICAL — inbound replies never processed)
+  - Phone normalisation: strip all non-digits first, then pattern-match 12-digit vs 10-digit
+  - Message insert: `body` → `content`, `created_at` → `sent_at`, added `lead_id`
+  - `lead_events` insert: removed non-existent `phone_normalised`, added `lead_id`
+- [x] **P3.3.5 — Inbound webhook URL fix** — Reconstructed from `x-forwarded-proto` + `x-forwarded-host` headers for correct Twilio signature validation in Vercel serverless
+- [x] **P3.3.6 — Twilio console config** — Set inbound webhook URL in Messaging Service → Integration tab (was blank)
+- [x] **P3.3.7 — Backfill script** (`scripts/backfill-messages.ts`) — idempotent fetch from Twilio API to populate historical messages. Confirmed 7 messages inserted.
+- **Result:** Full E2E confirmed 27 Mar 2026: outbound send → Twilio delivery callback → inbound reply → classify → auto-reply (wa_counsellor_intro).
+
+---
+
 ## 🟠 PHASE 3 — NEXT SPRINT
 
 - [ ] **P2.1 — Follow-up cron deduplication**
@@ -266,6 +290,9 @@
 | 12 | 26 Mar | 3 templates pending Twilio approval (`wa_welcome_manual`, `wa_followup_1`, `wa_counsellor_intro`) | Templates Agent | ✅ Resolved | All 3 confirmed approved 27 Mar. Dynamic lookup active; no code updates needed. |
 | 13 | 26 Mar | ButtonPayload field name from Twilio unverified | Code Agent | ✅ Resolved | Logging added to inbound webhook; verified in Vercel logs. |
 | 14 | 26 Mar | Zoho field mapping not yet done | Ops | ✅ Resolved | Multi-source fuzzy mapping in `zoho/route.ts`; Mobile > Phone fallback added. |
+| 15 | 27 Mar | Messages table empty since Week 1 — analytics/cooldown/status all broken | Code Agent | ✅ Resolved | Two field name mismatches in `dispatcher.ts`: `body`→`content`, `created_at`→`sent_at`. Silent Supabase failures since launch. |
+| 16 | 27 Mar | Inbound replies never processed — NLP classifier and state machine unreachable | Code Agent + Ops | ✅ Resolved | Three causes: (1) Twilio Messaging Service Integration tab had blank inbound URL — set to production URL. (2) Phone normalisation stripped `+` before E.164 check → no lead found. (3) `lead_events` insert referenced non-existent column. All three fixed. |
+| 17 | 27 Mar | Twilio signature validation blocked inbound in Vercel serverless | Code Agent | ✅ Resolved | `req.url` returns internal Vercel hostname — doesn't match Twilio's signed URL. Fixed by reconstructing from `x-forwarded-proto` + `x-forwarded-host` headers. |
 
 ---
 
@@ -295,6 +322,9 @@
 | 26 Mar | Contacts campaigns | Phase 3: CSV import to temp Supabase table | Zoho Contacts API integration |
 | 26 Mar | Zoho writeback scope (Phase 1) | Core: opt-out + reply class + hotness | Minimal (opt-out only) or Full (incl. Zoho Tasks) |
 | 26 Mar | re-engagement cron | Repurposed for Rules 5 & 6 (24h/48h follow-ups); 7-day dormancy cron deprecated | Keep 7-day cron, add new cron for follow-ups |
+| 27 Mar | Analytics page tab architecture | URL-param-based (`?tab=`) server component tabs — shareable, no client state | Client-side useState (incompatible with Next.js 16 server components) |
+| 27 Mar | Messages table backfill | Twilio message list API + `scripts/backfill-messages.ts` (idempotent) | Manual DB inserts; skip historical data |
+| 27 Mar | Twilio URL reconstruction for signature validation | Rebuild from `x-forwarded-proto` + `x-forwarded-host` in serverless | Trust `req.url` (wrong in Vercel — internal hostname) |
 
 ---
 

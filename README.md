@@ -3,7 +3,7 @@
 **Production-ready WhatsApp lead engagement engine** connecting Zoho CRM ↔ Twilio WhatsApp ↔ Supabase, with automated message classification, SLA tracking, campaign management, a visual Logic Builder, and a full source×persona routing rule set.
 
 **Live URL:** [https://le-whatsapp-engine.vercel.app/admin](https://le-whatsapp-engine.vercel.app/admin)
-**Version:** 3.2.0 | **Status:** ✅ Phase 1 & Phase 2 Complete — Engine live, E2E delivery confirmed 27 Mar 2026
+**Version:** 3.3.0 | **Status:** ✅ Phase 1, 2 & 3.3 Complete — Engine live, full E2E confirmed 27 Mar 2026 (outbound → delivery → inbound reply → classification → auto-reply)
 
 ---
 
@@ -95,7 +95,7 @@ Zoho CRM ──webhook──► /api/webhooks/zoho
 | **Campaign Manager** | `/admin/campaigns` | Manage bulk WhatsApp campaigns with per-campaign funnel stats |
 | **Create Campaign** | `/admin/campaigns/create` | Segment leads and launch batch sends |
 | **Reply Classification** | `/admin/classification` | Edit keywords per reply class — no deploy needed |
-| **Template Analytics** | `/admin/analytics` | Delivery %, reply %, per-template performance breakdown |
+| **Template Analytics** | `/admin/analytics` | 2-tab: Template Performance (delivery %, reply %, top error code) + Message Log (per-message status, lead, error, timestamps) |
 | **WhatsApp Templates** | `/admin/templates` | Live Twilio template list with approval status and manual Refresh |
 | **Zoho Field Mapping** | `/admin/zoho-mapping` | Internal key ↔ Zoho merge tag reference table + recommended JSON for Zoho webhook setup |
 
@@ -309,6 +309,7 @@ wa_pending → first_sent → replied → wa_hot → [counsellor handles]
 - `supabase/migrations/20260326_new_lead_fields.sql` — program, persona, academic_level, relocate_to_pune, urgency, lead_track, webinar_rsvp
 - `supabase/migrations/20260326_seed_workflow.sql` — Rules 1–4 decision graph seeded into workflow_rules
 - `supabase/migrations/20260327_system_settings.sql` — `system_settings` table for global engine configuration (Kill Switch)
+- `supabase/migrations/20260327_messages_error_code.sql` — adds `error_code` and `phone_normalised` columns to `messages` table; adds performance indexes
 
 ---
 
@@ -355,7 +356,8 @@ vercel --prod --yes
 |---|---|---|
 | Phase 1 | ✅ Complete | Rules Engine v3, Zoho integration, all 10 templates approved, E2E delivery confirmed 27 Mar 2026 |
 | Phase 2 | ✅ Complete | Global Kill Switch, Zoho Field Mapping page, persistent template cache, dispatcher safety layer |
-| Phase 3 | ⚪ Planned | Cron deduplication, named flow saves, editable button map, expanded Zoho writeback |
+| Phase 3.3 | ✅ Complete | Analytics 2-tab rewrite, messages table migration, dispatcher + inbound bug fixes, Twilio console config, backfill script, full E2E confirmed |
+| Phase 3 (next) | ⚪ Planned | Cron deduplication, named flow saves, editable button map, expanded Zoho writeback |
 | Phase 4 | ⚪ Future | Multiple flows, end node differentiation, CSV contacts campaigns |
 
 ---
