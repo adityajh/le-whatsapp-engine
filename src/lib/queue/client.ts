@@ -101,6 +101,37 @@ export async function dequeueOutbound(count = 10): Promise<Record<string, string
 }
 
 /**
+ * Enqueue a campaign outbound message (separate queue, rate-limited at 30/min by cron).
+ */
+export async function enqueueCampaignMessage(payload: Record<string, string>) {
+  if (!isWithinSendWindow()) {
+    const delayedKey = `${QUEUE_PREFIX}:outbound:delayed`;
+    await redisClient.rpush(delayedKey, JSON.stringify(payload));
+    console.log(`[Queue] Campaign message queued in delayed (outside window) for ${payload.to}`);
+    return;
+  }
+  await redisClient.rpush(`${QUEUE_PREFIX}:campaign`, JSON.stringify(payload));
+  console.log(`[Queue] Enqueued campaign message to ${payload.to}`);
+}
+
+/**
+ * Dequeue up to `count` campaign messages (cron drains at 30/min).
+ */
+export async function dequeueCampaignMessages(count = 30): Promise<Record<string, string>[]> {
+  const results: Record<string, string>[] = [];
+  for (let i = 0; i < count; i++) {
+    const item = await redisClient.lpop(`${QUEUE_PREFIX}:campaign`) as string | null;
+    if (!item) break;
+    try {
+      results.push(typeof item === 'string' ? JSON.parse(item) : item);
+    } catch (e) {
+      console.error('[Queue] Failed to parse campaign item', e);
+    }
+  }
+  return results;
+}
+
+/**
  * Dequeue up to `count` delayed outbound messages to move into the active queue.
  */
 export async function dequeueDelayedOutbound(count = 10): Promise<Record<string, string>[]> {

@@ -1,6 +1,6 @@
 // src/app/api/cron/process-queue/route.ts
 import { NextResponse } from 'next/server';
-import { dequeueInbound, dequeueOutbound, dequeueStatus, dequeueDelayedOutbound } from '@/lib/queue/client';
+import { dequeueInbound, dequeueOutbound, dequeueStatus, dequeueDelayedOutbound, dequeueCampaignMessages } from '@/lib/queue/client';
 import { processInboundMessage } from '@/lib/workers/inboundProcessor';
 import { processStatusUpdate } from '@/lib/workers/statusProcessor';
 import { dispatchMessage } from '@/lib/engine/dispatcher';
@@ -76,7 +76,29 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. Process status updates (delivery/read/failed callbacks)
+    // 3. Drain campaign queue (rate-limited: 30 messages per cron tick)
+    if (isWithinSendWindow()) {
+      const campaignJobs = await dequeueCampaignMessages(30);
+      for (const data of campaignJobs) {
+        try {
+          const msg = await dispatchMessage({
+            ...data,
+            to:               data.to as string,
+            from:             data.from as string,
+            contentSid:       data.contentSid as string,
+            contentVariables: data.contentVariables ? JSON.parse(data.contentVariables as string) : undefined,
+          } as any);
+          if (msg) {
+            results.push(`campaign:${data.to}:${msg.sid}`);
+            console.log(`[Cron] Campaign sent ${data.contentSid} to ${data.to} — SID: ${msg.sid}`);
+          }
+        } catch (e) {
+          console.error(`[Cron] Campaign dispatch error for ${data.to}`, e);
+        }
+      }
+    }
+
+    // 4. Process status updates (delivery/read/failed callbacks)
     const statusJobs = await dequeueStatus(10);
     for (const data of statusJobs) {
       try {
@@ -88,7 +110,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 4. Sweep wa_pending leads that arrived outside the send window
+    // 5. Sweep wa_pending leads that arrived outside the send window
     // Only runs when the window is open — picks up overnight leads at 9am
     if (isWithinSendWindow()) {
       const { data: pendingLeads } = await supabase
