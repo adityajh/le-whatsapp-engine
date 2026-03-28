@@ -5,6 +5,8 @@ import { processInboundMessage } from '@/lib/workers/inboundProcessor';
 import { processStatusUpdate } from '@/lib/workers/statusProcessor';
 import { dispatchMessage } from '@/lib/engine/dispatcher';
 import { isWithinSendWindow } from '@/lib/engine/sessionWindow';
+import { evaluateLeadAction } from '@/lib/engine/rulesEngine';
+import { supabase } from '@/lib/supabase';
 
 // cron-job.org calls this every minute.
 // Drains inbound, outbound, status, and sweeps delayed outbound.
@@ -83,6 +85,31 @@ export async function GET(request: Request) {
         results.push(`status:${data.MessageSid}`);
       } catch (e) {
         console.error('[Cron] Status job error', e);
+      }
+    }
+
+    // 4. Sweep wa_pending leads that arrived outside the send window
+    // Only runs when the window is open — picks up overnight leads at 9am
+    if (isWithinSendWindow()) {
+      const { data: pendingLeads } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('wa_state', 'wa_pending')
+        .eq('wa_opt_in', true)
+        .is('wa_last_outbound_at', null)
+        .limit(20);
+
+      for (const lead of pendingLeads || []) {
+        try {
+          await evaluateLeadAction(lead);
+          results.push(`pending_sweep:${lead.id}`);
+        } catch (e) {
+          console.error(`[Cron] Pending sweep error for lead ${lead.id}`, e);
+        }
+      }
+
+      if ((pendingLeads || []).length > 0) {
+        console.log(`[Cron] Pending sweep: evaluated ${pendingLeads!.length} wa_pending leads`);
       }
     }
   } catch (err) {
