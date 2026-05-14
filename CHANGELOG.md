@@ -5,6 +5,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.7.1] - 2026-05-13 (MQL Queue & History Fixes)
+
+### Fixed
+- **MQL Outreach filter not dismissing dealt leads** — The `.or()` + `not.in` PostgREST filter syntax was silently broken, causing leads with excluded statuses ('Attempted to Contact', 'Junk Lead', etc.) to remain in the active MQL Outreach list after being dealt with. Replaced with a client-side `.filter()` after fetching all MQL-stage leads, which correctly excludes any lead with a terminal status.
+- **MQL History section invisible** — Section was wrapped in a `{length > 0 && ...}` conditional, making it fully invisible when no history rows returned (whether due to the filter bug or genuinely empty). Section now always renders with a proper empty-state message so it's always visible on the page.
+- **MQL History missing leads** — The history query now filters client-side to only include leads that actually originated from MQL (those still on `lead_stage='MQL'` with an attempted status, or those with `wa_state='wa_closed'/'wa_sla_resolved'`), preventing non-MQL leads from polluting the history view.
+- **MQL History Stage column** — History table now shows both the current stage badge and status, making it easy to see where a lead landed after being dealt with.
+
+---
+
+## [5.7.0] - 2026-05-06 (MQL History Tracking)
+
+### Added
+- **MQL History Section** (`/admin/sla-monitor`) — New UI section displaying dealt MQL leads (status: 'Attempted to Contact', 'Junk Lead', 'Lost Lead', 'Not Qualified', 'Contacted'). Shows lead info, latest caller, notes, and updated timestamp.
+- **`latestCallLogMap` extraction** — Query logic added to fetch the most recent call log per lead to render the last caller and notes for historical leads without additional network requests.
 ## [5.7.0] - 2026-05-11 (Campaign Pipeline Fixes — Reports Restored)
 
 ### Fixed
@@ -23,6 +38,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [5.6.0] - 2026-04-27 (Call Log Overhaul + Zoho Stage Sync)
 
+### Changed
+- **MQL Outreach exclusions** — Expanded `MQL_EXCLUDE_STATUSES` to include `Attempted to Contact`. Leads now automatically drop out of the active MQL Outreach queue into the MQL History section as soon as a call is logged.
+
+### Fixed
+- **MQL History visibility** — Removed the strict `lead_stage = 'MQL'` requirement for the MQL History query. When a lead is disqualified or closed from the Call Log modal, its stage changes to `Lead`. By dropping the stage requirement and matching exclusively on historical/closed statuses (`Junk Lead`, `Lost Lead`, `Not Qualified`, `Attempted to Contact`), closed leads now correctly appear in the MQL History section instead of disappearing entirely.
+
+---
+
+## [5.6.0] - 2026-04-27 (Call Log Overhaul + Zoho Stage Sync)
 ### Added
 - **Stage-change webhook** (`/api/webhooks/zoho/stage-change`) — receives `id`/`Lead_Stage`/`Lead_Status` from a Zoho workflow rule on edit, updates Supabase within ~1 second. Closes the long-standing drift where leads moved out of MQL in Zoho stayed marked MQL locally. Requires a Zoho workflow rule on Leads module triggering on `Lead_Stage` or `Lead_Status` modified.
 - **`Lead_Stage` and `Lead_Status` to reconcile cron payload** — failed immediate writebacks (call log → Zoho) are now retried by the hourly reconcile cron. Previously the daily MQL sync would overwrite Supabase back from Zoho if the immediate write failed.
