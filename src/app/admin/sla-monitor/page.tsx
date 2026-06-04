@@ -3,6 +3,7 @@ import ManualReplyForm from '@/components/ManualReplyForm';
 import CallLogWrapper from '@/components/CallLogWrapper';
 import TriggerCronButton from '@/components/TriggerCronButton';
 import AssignDropdown from '@/components/AssignDropdown';
+import NoteTooltip from '@/components/NoteTooltip';
 import { ChevronRight } from 'lucide-react';
 
 export const revalidate = 0;
@@ -50,12 +51,23 @@ function computeNoAnswerCount(logs: { contact_status: string }[]): number {
   return count;
 }
 
-// Unified lead cell: name + phone + attempt badge + reply class pill
-function LeadCell({ lead, noAnswerCount = 0 }: { lead: any; noAnswerCount?: number }) {
+// Inline helper so server component can conditionally render the client NoteTooltip
+function MaybeNote({ note }: { note?: { caller: string; notes: string } | null }) {
+  if (!note?.notes?.trim()) return null;
+  return <NoteTooltip caller={note.caller} notes={note.notes} />;
+}
+
+// Unified lead cell: name + phone + attempt badge + reply class pill + called tag
+function LeadCell({ lead, noAnswerCount = 0, called = false }: { lead: any; noAnswerCount?: number; called?: boolean }) {
   return (
     <td className="px-4 py-3">
       <div className="font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
         {lead.name || '—'}
+        {called && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 whitespace-nowrap">
+            Called
+          </span>
+        )}
         {noAnswerCount > 0 && (
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
             noAnswerCount >= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
@@ -70,6 +82,11 @@ function LeadCell({ lead, noAnswerCount = 0 }: { lead: any; noAnswerCount?: numb
         )}
       </div>
       <div className="text-xs text-gray-400 font-mono">{lead.phone_normalised}</div>
+      {lead.followup_call_at && (
+        <div className="text-[11px] text-blue-600 font-medium mt-0.5 whitespace-nowrap">
+          📞 Next call: {formatIST(lead.followup_call_at)}
+        </div>
+      )}
     </td>
   );
 }
@@ -103,23 +120,23 @@ export default async function SLAMonitorPage() {
   // 0. MQL Outreach
   // Include rows where lead_status IS NULL — PostgreSQL's NOT IN evaluates NULL as
   // unknown and silently drops those rows, which would hide most untriaged MQL leads.
-  const MQL_EXCLUDE_STATUSES = ['Contacted', 'Junk Lead', 'Lost Lead', 'Not Qualified'];
+  const MQL_EXCLUDE_STATUSES = ['Contacted', 'Junk Lead', 'Lost Lead', 'Not Qualified', 'Attempted to Contact'];
   const excludeList = `(${MQL_EXCLUDE_STATUSES.map(s => `"${s}"`).join(',')})`;
   const { data: mqlLeads } = await supabase
     .from('leads')
-    .select('id, name, phone_normalised, zoho_lead_id, lead_stage, lead_status, wa_hotness, wa_reply_class, call_assigned_to, updated_at')
+    .select('id, name, phone_normalised, zoho_lead_id, lead_stage, lead_status, wa_hotness, wa_reply_class, call_assigned_to, updated_at, followup_call_at')
     .eq('lead_stage', 'MQL')
     .or(`lead_status.is.null,lead_status.not.in.${excludeList}`)
-    .order('created_at', { ascending: true });
+    .order('updated_at', { ascending: false });
 
   const mqlOutreachLeads = mqlLeads || [];
 
   // 1. Call Tracking (call_queued, call_follow_up, discovery_call)
   const { data: callTracking } = await supabase
     .from('leads')
-    .select('id, name, phone_normalised, zoho_lead_id, call_assigned_to, lead_status, wa_reply_class, updated_at, wa_state, followup_call_at, wa_hotness')
+    .select('id, name, phone_normalised, zoho_lead_id, call_assigned_to, lead_status, wa_reply_class, updated_at, created_at, wa_state, followup_call_at, wa_hotness')
     .in('wa_state', ['call_queued', 'call_follow_up', 'discovery_call'])
-    .order('updated_at', { ascending: false });
+    .order('created_at', { ascending: false });
 
   const allCallLeads = callTracking || [];
 
@@ -141,18 +158,52 @@ export default async function SLAMonitorPage() {
     l.followup_call_at && new Date(l.followup_call_at).getTime() > now
   ).sort((a, b) => new Date(a.followup_call_at!).getTime() - new Date(b.followup_call_at!).getTime());
 
+  // Backlog A: WA replied leads that were never actioned (no call made after reply)
+  // Only include leads that replied after Apr 21 — the system launch date
+  const SYSTEM_LAUNCH = '2026-04-21T00:00:00+05:30';
+  const { data: backlogReplied } = await supabase
+    .from('leads')
+    .select('id, name, phone_normalised, zoho_lead_id, wa_last_inbound_at, wa_reply_class, wa_hotness, call_assigned_to, lead_status, wa_state, followup_call_at')
+    .eq('wa_state', 'replied')
+    .not('wa_last_inbound_at', 'is', null)
+    .gte('wa_last_inbound_at', SYSTEM_LAUNCH)
+    .order('wa_last_inbound_at', { ascending: true });
+
+  // Backlog B: Scheduled follow-ups that are 3+ days overdue with no call logged after due date
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: backlogOverdue } = await supabase
+    .from('leads')
+    .select('id, name, phone_normalised, zoho_lead_id, followup_call_at, wa_reply_class, wa_hotness, call_assigned_to, lead_status, wa_state')
+    .in('wa_state', ['call_follow_up', 'discovery_call'])
+    .not('followup_call_at', 'is', null)
+    .lt('followup_call_at', threeDaysAgo)
+    .order('followup_call_at', { ascending: true });
+
+  const backlogRepliedLeads = backlogReplied || [];
+  const backlogOverdueLeads = backlogOverdue || [];
+
+  // Nurture / Not Now: leads who replied "not now" (wa_state = 'wa_nurture').
+  // These are a soft-no — not dismissed — but had no home section before, so they
+  // silently vanished. Surface them here so ops can re-engage later.
+  const { data: nurture } = await supabase
+    .from('leads')
+    .select('id, name, phone_normalised, zoho_lead_id, wa_last_inbound_at, wa_reply_class, wa_hotness, call_assigned_to, lead_status, wa_state, followup_call_at')
+    .eq('wa_state', 'wa_nurture')
+    .order('wa_last_inbound_at', { ascending: false });
+  const nurtureLeads = nurture || [];
+
   // 2. WhatsApp SLAs (Active)
   const { data: active } = await supabase
     .from('leads')
-    .select('id, name, phone_normalised, zoho_lead_id, owner_email, wa_hotness, wa_reply_class, lead_status, call_assigned_to, wa_human_response_due_at')
+    .select('id, name, phone_normalised, zoho_lead_id, owner_email, wa_hotness, wa_reply_class, lead_status, call_assigned_to, wa_human_response_due_at, followup_call_at')
     .not('wa_human_response_due_at', 'is', null)
-    .not('wa_state', 'in', '("wa_closed","wa_sla_escalated","wa_sla_resolved")')
+    .not('wa_state', 'in', '("wa_closed","wa_idle","wa_sla_escalated","wa_sla_resolved")')
     .order('wa_human_response_due_at', { ascending: true });
 
   // 3. Escalated
   const { data: escalated } = await supabase
     .from('leads')
-    .select('id, name, phone_normalised, zoho_lead_id, owner_email, wa_hotness, wa_reply_class, lead_status, call_assigned_to, updated_at')
+    .select('id, name, phone_normalised, zoho_lead_id, owner_email, wa_hotness, wa_reply_class, lead_status, call_assigned_to, updated_at, followup_call_at')
     .eq('wa_state', 'wa_sla_escalated')
     .order('updated_at', { ascending: false })
     .limit(20);
@@ -160,31 +211,28 @@ export default async function SLAMonitorPage() {
   const activeLeads = active || [];
   const escalatedLeads = escalated || [];
 
-  // 4. Compute noAnswerCount per lead (single query across all call queue leads)
-  const callLeadIds = [
-    ...callQueueLeads,
-    ...discoveryQueueLeads,
-    ...scheduledLeads,
-    ...mqlOutreachLeads,
-    ...escalatedLeads,
-  ].map(l => l.id).filter(Boolean);
+  // 4. Fetch all call logs in one shot — used for noAnswerCount, calledSet, and last note
+  // Fetching all logs (not filtered by current page leads) ensures the Called tag
+  // is accurate for any lead, regardless of what section they appear in.
+  const { data: callLogData } = await supabase
+    .from('call_logs')
+    .select('lead_id, contact_status, caller, notes')
+    .order('called_at', { ascending: false });
 
   const noAnswerCountMap: Record<string, number> = {};
-  if (callLeadIds.length > 0) {
-    const { data: callLogData } = await supabase
-      .from('call_logs')
-      .select('lead_id, contact_status')
-      .in('lead_id', callLeadIds)
-      .order('called_at', { ascending: false });
+  const lastNoteMap: Record<string, { caller: string; notes: string }> = {};
+  const calledSet = new Set<string>();
 
-    const byLead: Record<string, { contact_status: string }[]> = {};
-    for (const log of callLogData ?? []) {
-      if (!byLead[log.lead_id]) byLead[log.lead_id] = [];
-      byLead[log.lead_id].push(log);
-    }
-    for (const [leadId, logs] of Object.entries(byLead)) {
-      noAnswerCountMap[leadId] = computeNoAnswerCount(logs);
-    }
+  const byLead: Record<string, { contact_status: string; caller: string; notes: string }[]> = {};
+  for (const log of callLogData ?? []) {
+    if (!byLead[log.lead_id]) byLead[log.lead_id] = [];
+    byLead[log.lead_id].push(log);
+  }
+  for (const [leadId, logs] of Object.entries(byLead)) {
+    noAnswerCountMap[leadId] = computeNoAnswerCount(logs);
+    calledSet.add(leadId);
+    const withNote = logs.find(l => l.notes?.trim());
+    if (withNote) lastNoteMap[leadId] = { caller: withNote.caller, notes: withNote.notes };
   }
 
   // 5. Pipeline stats
@@ -226,7 +274,12 @@ export default async function SLAMonitorPage() {
   const callQueueLeadsMapped = callQueueLeads.map(lead => ({
     ...lead,
     listType: 'manual_call',
-    sortTime: lead.followup_call_at ? new Date(lead.followup_call_at).getTime() : new Date(lead.updated_at).getTime(),
+    // Overdue follow-ups use their followup_call_at (past timestamp → sort first, most overdue first).
+    // Pure call_queued leads: invert created_at so newest lead = smallest value = appears first,
+    // and all values stay > any overdue date (anchor 2030 >> any current timestamp).
+    sortTime: lead.followup_call_at
+      ? new Date(lead.followup_call_at).getTime()
+      : new Date('2030-01-01').getTime() * 2 - new Date(lead.created_at).getTime(),
   }));
   const activeLeadsMapped = activeLeads.map(lead => ({
     ...lead,
@@ -358,7 +411,7 @@ export default async function SLAMonitorPage() {
               <tbody>
                 {escalatedLeads.map((lead) => (
                   <tr key={lead.id} className="border-b border-red-100/50 hover:bg-red-50/40 bg-white">
-                    <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
+                    <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} called={calledSet.has(lead.id)} />
                     <LeadStatusCell status={lead.lead_status} />
                     <HotnessCell hotness={lead.wa_hotness} />
                     <td className={TH}>
@@ -366,6 +419,7 @@ export default async function SLAMonitorPage() {
                     </td>
                     <td className={TH + ' text-xs text-red-600 font-medium whitespace-nowrap'}>
                       Escalated {formatIST(lead.updated_at)}
+                      <MaybeNote note={lastNoteMap[lead.id]} />
                     </td>
                     <td className={TH + ' text-right'}>
                       <CallLogWrapper lead={lead} queueType="whatsapp_reply" noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
@@ -405,13 +459,16 @@ export default async function SLAMonitorPage() {
                 </tr>
               ) : mqlOutreachLeads.map((lead) => (
                 <tr key={lead.id} className="border-b hover:bg-amber-50/20">
-                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
+                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} called={calledSet.has(lead.id)} />
                   <LeadStatusCell status={lead.lead_status} />
                   <HotnessCell hotness={lead.wa_hotness} />
                   <td className={TH}>
                     <AssignDropdown leadId={lead.id} currentAssignee={lead.call_assigned_to} />
                   </td>
-                  <td className={TH + ' text-xs text-gray-500'}>Updated {formatIST(lead.updated_at)}</td>
+                  <td className={TH + ' text-xs text-gray-500'}>
+                    Updated {formatIST(lead.updated_at)}
+                    <MaybeNote note={lastNoteMap[lead.id]} />
+                  </td>
                   <td className={TH + ' text-right'}>
                     <CallLogWrapper lead={lead} queueType="mql_outreach" noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
                   </td>
@@ -464,12 +521,12 @@ export default async function SLAMonitorPage() {
                 } else {
                   contextLabel = lead.followup_call_at
                     ? `Follow-up due ${formatIST(lead.followup_call_at)}`
-                    : `Queued ${formatIST(lead.updated_at)}`;
+                    : `Queued ${formatIST(lead.created_at)}`;
                 }
 
                 return (
                   <tr key={lead.id} className={`border-b hover:bg-gray-50/50 ${isBreached ? 'bg-red-50/40' : ''}`}>
-                    <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
+                    <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} called={calledSet.has(lead.id)} />
                     <LeadStatusCell status={lead.lead_status} />
                     <HotnessCell hotness={lead.wa_hotness} />
                     <td className={TH}>
@@ -490,6 +547,7 @@ export default async function SLAMonitorPage() {
                           {contextLabel}
                         </span>
                       </div>
+                      <MaybeNote note={lastNoteMap[lead.id]} />
                     </td>
                     <td className={TH + ' text-right'}>
                       <CallLogWrapper
@@ -532,7 +590,7 @@ export default async function SLAMonitorPage() {
                 </tr>
               ) : discoveryQueueLeads.map((lead) => (
                 <tr key={lead.id} className="border-b hover:bg-gray-50/50">
-                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
+                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} called={calledSet.has(lead.id)} />
                   <LeadStatusCell status={lead.lead_status} />
                   <HotnessCell hotness={lead.wa_hotness} />
                   <td className={TH}>
@@ -543,6 +601,7 @@ export default async function SLAMonitorPage() {
                       ? <span className="text-amber-600">Follow-up due {formatIST(lead.followup_call_at)}</span>
                       : formatIST(lead.updated_at)
                     }
+                    <MaybeNote note={lastNoteMap[lead.id]} />
                   </td>
                   <td className={TH + ' text-right'}>
                     <CallLogWrapper lead={lead} queueType="discovery_call" noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
@@ -580,7 +639,7 @@ export default async function SLAMonitorPage() {
                 </tr>
               ) : scheduledLeads.map((lead) => (
                 <tr key={lead.id} className="border-b hover:bg-gray-50/50">
-                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} />
+                  <LeadCell lead={lead} noAnswerCount={noAnswerCountMap[lead.id] ?? 0} called={calledSet.has(lead.id)} />
                   <LeadStatusCell status={lead.lead_status} />
                   <HotnessCell hotness={lead.wa_hotness} />
                   <td className={TH}>
@@ -597,11 +656,12 @@ export default async function SLAMonitorPage() {
                         {formatIST(lead.followup_call_at)}
                       </span>
                     </div>
+                    <MaybeNote note={lastNoteMap[lead.id]} />
                   </td>
                   <td className={TH + ' text-right'}>
                     <CallLogWrapper
                       lead={lead}
-                      queueType={lead.wa_state === 'discovery_call' ? 'discovery_call' : 'whatsapp_reply'}
+                      queueType={lead.wa_state === 'discovery_call' ? 'discovery_call' : 'call_queue'}
                       noAnswerCount={noAnswerCountMap[lead.id] ?? 0}
                     />
                   </td>
@@ -611,6 +671,174 @@ export default async function SLAMonitorPage() {
           </table>
         </div>
       </section>
+
+      <hr className="border-gray-200" />
+
+      {/* 6. BACKLOG CALLS */}
+      <section>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+            Backlog Calls{' '}
+            <span className="ml-1 bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full text-xs">
+              {backlogRepliedLeads.length + backlogOverdueLeads.length}
+            </span>
+          </h2>
+        </div>
+        <p className="text-xs text-gray-400 mb-4 ml-4">
+          Leads who replied on WhatsApp but were never called back, or had a scheduled follow-up that was missed by 3+ days.
+        </p>
+
+        {/* Backlog A: WA Replied — No Call Made */}
+        {backlogRepliedLeads.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs font-semibold text-rose-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+              💬 WA Replied — No Call Made
+              <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-xs font-semibold">{backlogRepliedLeads.length}</span>
+            </p>
+            <div className="bg-white border border-rose-200 rounded-lg overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="bg-rose-50/40 border-b text-xs text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2">Lead</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Hotness</th>
+                    <th className="px-4 py-2">Assigned</th>
+                    <th className="px-4 py-2">Replied</th>
+                    <th className="px-4 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {backlogRepliedLeads.map((lead) => (
+                    <tr key={lead.id} className="border-b border-rose-50 hover:bg-rose-50/20">
+                      <LeadCell lead={lead} called={calledSet.has(lead.id)} />
+                      <LeadStatusCell status={lead.lead_status} />
+                      <HotnessCell hotness={lead.wa_hotness} />
+                      <td className="px-4 py-3">
+                        <AssignDropdown leadId={lead.id} currentAssignee={lead.call_assigned_to} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-rose-600 font-medium whitespace-nowrap">
+                        {formatIST(lead.wa_last_inbound_at)}
+                        <MaybeNote note={lastNoteMap[lead.id]} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <CallLogWrapper lead={lead} queueType="call_queue" noAnswerCount={0} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Backlog B: Missed Follow-ups (3+ days overdue) */}
+        {backlogOverdueLeads.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+              📞 Missed Follow-ups — 3+ Days Overdue
+              <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-semibold">{backlogOverdueLeads.length}</span>
+            </p>
+            <div className="bg-white border border-orange-200 rounded-lg overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="bg-orange-50/40 border-b text-xs text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2">Lead</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Hotness</th>
+                    <th className="px-4 py-2">Assigned</th>
+                    <th className="px-4 py-2">Was Due</th>
+                    <th className="px-4 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {backlogOverdueLeads.map((lead) => {
+                    const daysOverdue = Math.floor((Date.now() - new Date(lead.followup_call_at!).getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <tr key={lead.id} className="border-b border-orange-50 hover:bg-orange-50/20">
+                        <LeadCell lead={lead} called={calledSet.has(lead.id)} />
+                        <LeadStatusCell status={lead.lead_status} />
+                        <HotnessCell hotness={lead.wa_hotness} />
+                        <td className="px-4 py-3">
+                          <AssignDropdown leadId={lead.id} currentAssignee={lead.call_assigned_to} />
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <span className="text-orange-600 font-semibold">{daysOverdue}d overdue</span>
+                          <span className="text-gray-400 ml-1">· {formatIST(lead.followup_call_at)}</span>
+                          <MaybeNote note={lastNoteMap[lead.id]} />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <CallLogWrapper
+                            lead={lead}
+                            queueType={lead.wa_state === 'discovery_call' ? 'discovery_call' : 'call_queue'}
+                            noAnswerCount={0}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {backlogRepliedLeads.length === 0 && backlogOverdueLeads.length === 0 && (
+          <div className="bg-white border rounded-lg px-4 py-10 text-center text-gray-400 text-sm">
+            No backlog — all replies and follow-ups are on track. 🎉
+          </div>
+        )}
+      </section>
+
+      {nurtureLeads.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-violet-400" />
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+              Nurture — Not Now{' '}
+              <span className="ml-1 bg-violet-100 text-violet-700 py-0.5 px-2 rounded-full text-xs">
+                {nurtureLeads.length}
+              </span>
+            </h2>
+          </div>
+          <p className="text-xs text-gray-400 mb-4 ml-4">
+            Leads who replied “not now” — a soft no, not dismissed. Re-engage later or queue a call when timing is better.
+          </p>
+          <div className="bg-white border border-violet-200 rounded-lg overflow-hidden shadow-sm">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="bg-violet-50/40 border-b text-xs text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-2">Lead</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Hotness</th>
+                  <th className="px-4 py-2">Assigned</th>
+                  <th className="px-4 py-2">Last Reply</th>
+                  <th className="px-4 py-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nurtureLeads.map((lead) => (
+                  <tr key={lead.id} className="border-b border-violet-50 hover:bg-violet-50/20">
+                    <LeadCell lead={lead} called={calledSet.has(lead.id)} />
+                    <LeadStatusCell status={lead.lead_status} />
+                    <HotnessCell hotness={lead.wa_hotness} />
+                    <td className="px-4 py-3">
+                      <AssignDropdown leadId={lead.id} currentAssignee={lead.call_assigned_to} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                      {formatIST(lead.wa_last_inbound_at)}
+                      <MaybeNote note={lastNoteMap[lead.id]} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <CallLogWrapper lead={lead} queueType="call_queue" noAnswerCount={0} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <hr className="border-gray-200 mt-12 mb-8" />
 
