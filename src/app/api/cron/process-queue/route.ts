@@ -65,7 +65,10 @@ export async function GET(request: Request) {
           to:         data.to as string,
           from:       data.from as string,
           contentSid: data.contentSid as string,
-          contentVariables: data.contentVariables ? JSON.parse(data.contentVariables as string) : undefined
+          contentVariables: data.contentVariables ? JSON.parse(data.contentVariables as string) : undefined,
+          // Redis payload is string-typed — coerce. Set on transactional first-touch
+          // receipts (form-fill confirmation) which must not be cooldown-suppressed.
+          bypassCooldown: data.bypassCooldown === 'true',
         } as any);
         if (msg) {
           results.push(`outbound:${data.to}:${msg.sid}`);
@@ -153,7 +156,7 @@ export async function GET(request: Request) {
         .eq('wa_state', 'wa_pending')
         .eq('wa_opt_in', true)
         .is('wa_last_outbound_at', null)
-        .limit(20);
+        .limit(50);
 
       for (const lead of pendingLeads || []) {
         try {

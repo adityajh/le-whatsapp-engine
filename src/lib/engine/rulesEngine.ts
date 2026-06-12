@@ -7,6 +7,11 @@ import { logRoutingEvent, RoutingTrigger } from './eventLogger';
 
 const PRIMARY_SENDER = '+917709333161';
 
+// Combined enquiry confirmation + CTA buttons. Falls back to plain confirmation
+// while wa_enquiry_cta is pending Meta approval.
+const UTILITY_FIRST_TOUCH_TEMPLATE = 'wa_enquiry_cta';
+const UTILITY_FIRST_TOUCH_FALLBACK = 'wa_enquiry_received';
+
 export async function handleOptOut(leadId: string) {
   console.log(`[Rules Engine] Processing STOP/Opt-Out for lead ${leadId}`);
   const { error } = await supabase
@@ -64,7 +69,93 @@ export async function evaluateLeadAction(lead: Lead, trigger: RoutingTrigger = '
     return;
   }
 
-  // ── Graph evaluation ──────────────────────────────────────────────────────
+  // ── Universal UTILITY first-touch ─────────────────────────────────────────
+  // EVERY new lead gets the enquiry-confirmation receipt (wa_enquiry_received)
+  // before any graph routing. It's a transactional form-fill receipt: UTILITY
+  // category → not subject to Meta's marketing frequency cap → ~100% delivery.
+  // The graph still runs afterwards, but only for FILTERING decisions (close →
+  // manual triage); its marketing welcome is NOT sent — that content now rides
+  // the follow-up chain / the reply session. If the utility template is ever
+  // unapproved/unresolvable this whole block is skipped and the legacy
+  // graph-driven welcome flow below takes over unchanged.
+  const [ctaSid, fallbackSid] = await Promise.all([
+    getTwilioTemplateSid(UTILITY_FIRST_TOUCH_TEMPLATE),
+    getTwilioTemplateSid(UTILITY_FIRST_TOUCH_FALLBACK),
+  ]);
+  const utilitySid = ctaSid ?? fallbackSid;
+  const utilityTemplateName = ctaSid ? UTILITY_FIRST_TOUCH_TEMPLATE : UTILITY_FIRST_TOUCH_FALLBACK;
+  if (utilitySid) {
+    // Atomic claim: only the FIRST evaluation of this lead flips wa_last_outbound_at
+    // from NULL. Concurrent webhook deliveries / cron sweeps lose the race and bail,
+    // so the receipt is sent exactly once (fixes duplicate first-touch sends).
+    const nowIso = new Date().toISOString();
+    const { data: claimed } = await supabase
+      .from('leads')
+      .update({
+        wa_state: 'first_sent',
+        wa_last_outbound_at: nowIso,
+        wa_last_template: utilityTemplateName,
+        updated_at: nowIso,
+      })
+      .eq('id', lead.id)
+      .is('wa_last_outbound_at', null)
+      .select('id');
+
+    if (!claimed || claimed.length === 0) {
+      console.log(`[Rules Engine] Lead ${lead.id} already claimed by a concurrent evaluation — skipping duplicate first-touch.`);
+      return;
+    }
+
+    console.log(`[Rules Engine] Universal UTILITY first-touch → ${lead.phone_normalised}`);
+
+    await logRoutingEvent(lead.id, {
+      trigger,
+      graph_used: false,
+      lead_source: lead.lead_source ?? null,
+      persona: lead.persona ?? null,
+      template_selected: utilityTemplateName,
+      template_sid: utilitySid,
+      reason: 'utility_first_touch',
+    });
+
+    await enqueueOutboundMessage({
+      to: lead.phone_normalised,
+      from: PRIMARY_SENDER,
+      contentSid: utilitySid,
+      templateName: utilityTemplateName,
+      leadId: lead.id,
+      contentVariables: JSON.stringify({ '1': lead.name || 'there' }),
+      // The receipt is a transactional response to the form-fill the user just made.
+      // Without this, prior campaign/failed sends to the same phone trip the 2-message
+      // cooldown and the receipt is silently dropped while the lead looks contacted.
+      bypassCooldown: 'true',
+    });
+
+    // Graph still decides filtering: closed leads go to manual triage (they keep
+    // their receipt, but exit the automated follow-up chain).
+    const { data: wf } = await supabase
+      .from('workflow_rules')
+      .select('*')
+      .eq('id', '00000000-0000-0000-0000-000000000001')
+      .single();
+    if (wf) {
+      const filterAction = evaluateWorkflowGraph(
+        'wa_pending', // evaluate as a fresh lead — we already flipped wa_state above
+        lead,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        wf.conditions_json as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        wf.actions_json as any
+      );
+      if (filterAction.type === 'close') {
+        console.log(`[Rules Engine] Lead ${lead.id} filtered post-receipt — ${filterAction.reason}`);
+        await supabase.from('leads').update({ wa_state: 'wa_manual_triage', updated_at: new Date().toISOString(), zoho_synced_at: null }).eq('id', lead.id);
+      }
+    }
+    return;
+  }
+
+  // ── Graph evaluation (legacy fallback — utility template unavailable) ──────
   const { data: workflow, error } = await supabase
     .from('workflow_rules')
     .select('*')
@@ -109,7 +200,8 @@ export async function evaluateLeadAction(lead: Lead, trigger: RoutingTrigger = '
     return;
   }
 
-  // ── Resolve SID ───────────────────────────────────────────────────────────
+  // ── Resolve SID (legacy path: utility template was unavailable above) ──────
+  const templateName = action.templateName;
   const contentSid = await getTwilioTemplateSid(action.templateName);
   if (!contentSid) {
     console.error(`[Rules Engine] Unknown template "${action.templateName}" — no SID in Supabase/Twilio. Marking unrouted.`);
@@ -118,14 +210,14 @@ export async function evaluateLeadAction(lead: Lead, trigger: RoutingTrigger = '
   }
 
   // ── Enqueue ───────────────────────────────────────────────────────────────
-  console.log(`[Rules Engine] Enqueueing ${action.templateName} (${contentSid}) → ${lead.phone_normalised}`);
+  console.log(`[Rules Engine] Enqueueing ${templateName} (${contentSid}) → ${lead.phone_normalised}`);
 
   await logRoutingEvent(lead.id, {
     trigger,
     graph_used: true,
     lead_source: lead.lead_source ?? null,
     persona: lead.persona ?? null,
-    template_selected: action.templateName,
+    template_selected: templateName,
     template_sid: contentSid,
     reason: action.reason,
   });
@@ -134,7 +226,7 @@ export async function evaluateLeadAction(lead: Lead, trigger: RoutingTrigger = '
     to: lead.phone_normalised,
     from: PRIMARY_SENDER,
     contentSid,
-    templateName: action.templateName,
+    templateName,
     leadId: lead.id,
     contentVariables: JSON.stringify({ '1': lead.name || 'there' }),
   });
@@ -144,7 +236,7 @@ export async function evaluateLeadAction(lead: Lead, trigger: RoutingTrigger = '
     .update({
       wa_state: 'first_sent',
       wa_last_outbound_at: new Date().toISOString(),
-      wa_last_template: action.templateName,
+      wa_last_template: templateName,
       updated_at: new Date().toISOString(),
     })
     .eq('id', lead.id);

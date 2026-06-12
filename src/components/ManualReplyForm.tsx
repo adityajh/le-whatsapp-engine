@@ -16,10 +16,16 @@ const HOTNESS_STYLES: Record<string, string> = {
   cold: 'bg-blue-100 text-blue-700',
 };
 
+const SOURCES = ['Direct WhatsApp', 'Instagram', 'Web Chat', 'Email', 'IVR'];
+
 export default function ManualReplyForm() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<LeadResult[]>([]);
   const [selected, setSelected] = useState<LeadResult | null>(null);
+  const [source, setSource] = useState(SOURCES[0]);
+  const [newName, setNewName] = useState('');
+  const [messageSent, setMessageSent] = useState('');
+  const [replyReceived, setReplyReceived] = useState('');
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,23 +83,38 @@ export default function ManualReplyForm() {
     setMessage(null);
   }
 
+  // A typed number (not in search) is valid to submit if it has 10+ digits.
+  const typedDigits = query.replace(/\D/g, '');
+  const canSubmitNew = !selected && typedDigits.length >= 10;
+
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
-    if (!selected) return;
+    if (!selected && !canSubmitNew) return;
+    const phone = selected ? selected.phone_normalised : query.trim();
     setSubmitting(true);
     setMessage(null);
     try {
       const res = await fetch('/api/admin/manual-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: selected.phone_normalised }),
+        body: JSON.stringify({
+          phone,
+          source,
+          name: !selected ? (newName.trim() || undefined) : undefined,
+          messageSent: messageSent.trim() || undefined,
+          replyReceived: replyReceived.trim() || undefined,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add to queue');
-      setMessage({ text: `${selected.name || 'Lead'} added to Call Queue.`, type: 'success' });
+      if (!res.ok) throw new Error(data.error || 'Failed to add reply');
+      const who = selected?.name || newName.trim() || 'New lead';
+      setMessage({ text: `${who} added to Gargi's inbound box (${source}).`, type: 'success' });
       setQuery('');
       setSelected(null);
       setResults([]);
+      setNewName('');
+      setMessageSent('');
+      setReplyReceived('');
       router.refresh();
     } catch (err: any) {
       setMessage({ text: err.message, type: 'error' });
@@ -107,9 +128,21 @@ export default function ManualReplyForm() {
   return (
     <div className="bg-white border rounded-lg p-6 shadow-sm border-blue-200">
       <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-1">Manual Reply Entry</h2>
-      <p className="text-xs text-gray-500 mb-4">Someone replied to an old/failed message? Search by name or phone to drop them into the Call Queue.</p>
+      <p className="text-xs text-gray-500 mb-4">Logged a reply from a lead (Instagram, Email, Direct WhatsApp…)? Search an existing lead, or type a new number to add it. Goes to Gargi&rsquo;s inbound box.</p>
 
-      <form onSubmit={handleSubmit} className="flex gap-3 items-start">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div className="flex gap-3 items-start">
+        <div className="w-44 shrink-0">
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+            aria-label="Reply source"
+          >
+            {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
         <div ref={containerRef} className="relative flex-1">
           <input
             type="text"
@@ -166,18 +199,59 @@ export default function ManualReplyForm() {
           )}
 
           {open && results.length === 0 && !searching && query.length >= 2 && (
-            <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-3 text-sm text-gray-400">
-              No leads found for &ldquo;{query}&rdquo;
+            <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-3 text-sm text-gray-500">
+              {canSubmitNew
+                ? <>Not in the list — this number will be <span className="font-semibold">added as a new lead</span>. Add a name below.</>
+                : <>No match. Type the full 10-digit number to add it as a new lead.</>}
             </div>
           )}
+        </div>
+        </div>
+
+        {/* New-number name field — only when adding a number not found in search */}
+        {canSubmitNew && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Name <span className="text-gray-300">(for the new number)</span></label>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Lead name (optional)"
+              className="w-full md:w-72 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+        )}
+
+        {/* Message sent + reply received — the actual conversation, both important */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Message sent <span className="text-gray-300">(optional)</span></label>
+            <textarea
+              value={messageSent}
+              onChange={(e) => setMessageSent(e.target.value)}
+              rows={2}
+              placeholder="What Jonathan sent…"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Reply received</label>
+            <textarea
+              value={replyReceived}
+              onChange={(e) => setReplyReceived(e.target.value)}
+              rows={2}
+              placeholder="What the lead replied…"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            />
+          </div>
         </div>
 
         <button
           type="submit"
-          disabled={submitting || !selected}
-          className="bg-gray-900 text-white px-5 py-2 rounded-md font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-40 whitespace-nowrap"
+          disabled={submitting || (!selected && !canSubmitNew)}
+          className="self-start bg-gray-900 text-white px-5 py-2 rounded-md font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-40 whitespace-nowrap"
         >
-          {submitting ? 'Adding…' : 'Add to Queue'}
+          {submitting ? 'Adding…' : 'Add Reply'}
         </button>
       </form>
 
